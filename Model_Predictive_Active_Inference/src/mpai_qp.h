@@ -16,7 +16,7 @@ public:
               double umin, double umax);
 
     vector<double> optimize(double x1_init_, double x2_init_, double mu_init_, double mu_p_init_);
-    void shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolution, int Np);
+    void shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolution);
 
     OsqpEigen::Solver solver;
 

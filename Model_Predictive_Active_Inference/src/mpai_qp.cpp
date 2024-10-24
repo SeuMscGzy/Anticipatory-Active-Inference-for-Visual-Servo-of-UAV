@@ -126,27 +126,28 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     initsolver();
 }
 
-void Optimizer::shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolution, int Np)
+void Optimizer::shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolution)
 {
-    if (Np > 1)
-    {
-        solution.head(Np - 1) = solution.segment(1, Np - 1);
-        Dualsolution.head(Np - 1) = Dualsolution.segment(1, Np - 1);
-    }
-    // 复制最后一个元素
+    // 左移 solution 和 Dualsolution 的前 Np - 1 个元素
+    solution.head(Np - 1) = solution.segment(1, Np - 1);
+    Dualsolution.head(Np - 1) = Dualsolution.segment(1, Np - 1);
+
+    // 将倒数第二个元素复制到最后一个位置
     solution(Np - 1) = solution(Np - 2);
     Dualsolution(Np - 1) = Dualsolution(Np - 2);
 
-    int remaining = 2 * (Np + 1);
-    if (remaining > 2)
-    {
-        solution.segment(Np, remaining - 2) = solution.segment(Np + 2, remaining - 2);
-        Dualsolution.segment(Np, remaining - 2) = Dualsolution.segment(Np + 2, remaining - 2);
-        solution(Np + remaining - 2) = solution(Np + remaining - 4);
-        Dualsolution(Np + remaining - 2) = Dualsolution(Np + remaining - 4);
-        solution(Np + remaining - 1) = solution(Np + remaining - 3);
-        Dualsolution(Np + remaining - 1) = Dualsolution(Np + remaining - 3);
-    }
+    // 计算 solution 向量的总长度
+    int totalSize = solution.size();
+
+    // 计算剩余部分的长度
+    int remaining = totalSize - Np;
+
+    // 左移 solution 的剩余部分
+    solution.segment(Np, remaining - 2) = solution.segment(Np + 2, remaining - 2);
+
+    // 将倒数第三和倒数第四个元素复制到最后两个位置
+    solution(totalSize - 2) = solution(totalSize - 4);
+    solution(totalSize - 1) = solution(totalSize - 3);
 }
 
 vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_init_, double mu_p_init_)
@@ -160,9 +161,6 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
     l[Np + 1] = mu_p_init_;
     u[Np + 1] = mu_p_init_;
 
-    // 将上一步的解后推后作为初始值
-    // shiftDecisionVariables();
-
     // 更新求解器的梯度和边界
     solver.updateGradient(q);
     solver.updateLowerBound(l);
@@ -174,6 +172,7 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
     {
         VectorXd solution = solver.getSolution();
         VectorXd Dualsolution = solver.getDualSolution();
+
         // Extracting u which has Np elements
         double u_now = solution(0);
 
@@ -186,25 +185,17 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
         // 计算总代价
         double cost = solver.getObjValue();
 
-        shiftDecisionVariables(solution, Dualsolution, Np);
+        shiftDecisionVariables(solution, Dualsolution);
 
         solver.setWarmStart(solution, Dualsolution);
 
-        vector<double> result(4);
-        result[0] = u_now;
-        result[1] = mu_next;
-        result[2] = mu_p_next;
-        result[3] = cost;
+        vector<double> result = {u_now, mu_next, mu_p_next, cost};
         return result;
     }
     else
     {
         std::cerr << "Failed to solve the problem" << std::endl;
-        vector<double> result(4);
-        result[0] = 0;
-        result[1] = 0;
-        result[2] = 0;
-        result[3] = 0;
+        vector<double> result = {0, 0, 0, 0};
         return result;
     }
 }
@@ -213,25 +204,35 @@ void Optimizer::initsolver()
 {
     // 初始化求解器
     solver.data()->setNumberOfVariables(Np + 2 * (Np + 1));
-    solver.data()->setNumberOfConstraints(Np + 2 * (Np + 1));
+    solver.data()->setNumberOfConstraints(Np + 2);
     solver.settings()->setAbsoluteTolerance(1e-3); // 设置绝对误差阈值
     solver.settings()->setRelativeTolerance(1e-3); // 设置相对误差阈值
-    solver.settings()->setMaxIteration(30);       // 设置最大迭代次数为100
+    solver.settings()->setMaxIteration(100);        // 设置最大迭代次数为100
     P = bigMatrix1.sparseView();
     // cout << bigMatrix1 << endl;
     // cout << P << endl;
     Eigen::VectorXd q1(Np + 2 * (Np + 1));
     q = q1;
-    Eigen::SparseMatrix<double> A1(Np + 2 * (Np + 1), Np + 2 * (Np + 1));
+
+    Eigen::SparseMatrix<double> A1(Np + 2, Np + 2 * (Np + 1));
+    // 创建一个容器来存储非零元素
+    std::vector<Eigen::Triplet<double>> triplets;
+
+    // 构造 A 矩阵
+    for (int i = 0; i < Np + 2; ++i)
+    {
+        // 在第 i 行，第 i 列设置值为 1
+        triplets.emplace_back(i, i, 1.0);
+    }
+    // 将非零元素添加到 A 矩阵
+    A1.setFromTriplets(triplets.begin(), triplets.end());
     A = A1;
-    Eigen::VectorXd l1(Np + 2 * (Np + 1)), u1(Np + 2 * (Np + 1));
+    Eigen::VectorXd l1(Np + 2), u1(Np + 2);
     l = l1;
     u = u1;
     // 设置上下界
     l.head(Np).setConstant(umin);
     u.head(Np).setConstant(umax);
-    l.segment(Np, Np + 2 * (Np + 1) - Np).setConstant(-std::numeric_limits<double>::infinity());
-    u.segment(Np, Np + 2 * (Np + 1) - Np).setConstant(std::numeric_limits<double>::infinity());
 
     // 设置额外变量的精确值
     l[Np] = 0;
@@ -240,8 +241,6 @@ void Optimizer::initsolver()
     u[Np + 1] = 0;
     // cout << l << endl;
     // cout << u << endl;
-    //  构建 A 矩阵
-    A.setIdentity(); // 设为单位矩阵，因为我们希望每个变量独立
     // solver.data()->setNumberOfVariables(Np + 2 * (Np + 1));
     // solver.data()->setNumberOfConstraints(Np + 2 * (Np + 1));
     //  配置求解器

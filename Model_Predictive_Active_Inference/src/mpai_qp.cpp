@@ -9,6 +9,7 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
 {
     bigMatrix1.resize(Np + 2 * (Np + 1), Np + 2 * (Np + 1));
     bigMatrix2.resize(1, Np + 2 * (Np + 1));
+
     // 离散系统矩阵
     MatrixXd Ad(2, 2);
     Ad << 1, dt,
@@ -125,6 +126,29 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     initsolver();
 }
 
+void Optimizer::shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolution, int Np)
+{
+    if (Np > 1)
+    {
+        solution.head(Np - 1) = solution.segment(1, Np - 1);
+        Dualsolution.head(Np - 1) = Dualsolution.segment(1, Np - 1);
+    }
+    // 复制最后一个元素
+    solution(Np - 1) = solution(Np - 2);
+    Dualsolution(Np - 1) = Dualsolution(Np - 2);
+
+    int remaining = 2 * (Np + 1);
+    if (remaining > 2)
+    {
+        solution.segment(Np, remaining - 2) = solution.segment(Np + 2, remaining - 2);
+        Dualsolution.segment(Np, remaining - 2) = Dualsolution.segment(Np + 2, remaining - 2);
+        solution(Np + remaining - 2) = solution(Np + remaining - 4);
+        Dualsolution(Np + remaining - 2) = Dualsolution(Np + remaining - 4);
+        solution(Np + remaining - 1) = solution(Np + remaining - 3);
+        Dualsolution(Np + remaining - 1) = Dualsolution(Np + remaining - 3);
+    }
+}
+
 vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_init_, double mu_p_init_)
 {
     Eigen::RowVectorXd rowVec(2);
@@ -136,6 +160,9 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
     l[Np + 1] = mu_p_init_;
     u[Np + 1] = mu_p_init_;
 
+    // 将上一步的解后推后作为初始值
+    // shiftDecisionVariables();
+
     // 更新求解器的梯度和边界
     solver.updateGradient(q);
     solver.updateLowerBound(l);
@@ -145,8 +172,8 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
     auto sol_result = solver.solveProblem();
     if (sol_result == OsqpEigen::ErrorExitFlag::NoError)
     {
-        Eigen::VectorXd solution = solver.getSolution();
-
+        VectorXd solution = solver.getSolution();
+        VectorXd Dualsolution = solver.getDualSolution();
         // Extracting u which has Np elements
         double u_now = solution(0);
 
@@ -156,14 +183,12 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
         // Extracting mu_p which also has Np + 1 elements
         double mu_p_next = solution(Np + 3);
 
-        // 计算二次形式部分
-        double quadraticPart = 0.5 * (solution.transpose() * bigMatrix1 * solution).value();
-
-        // 计算线性形式部分
-        double linearPart = (q.transpose() * solution).value();
-
         // 计算总代价
-        double cost = quadraticPart + linearPart;
+        double cost = solver.getObjValue();
+
+        shiftDecisionVariables(solution, Dualsolution, Np);
+
+        solver.setWarmStart(solution, Dualsolution);
 
         vector<double> result(4);
         result[0] = u_now;
@@ -175,10 +200,11 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
     else
     {
         std::cerr << "Failed to solve the problem" << std::endl;
-        vector<double> result(3);
+        vector<double> result(4);
         result[0] = 0;
         result[1] = 0;
         result[2] = 0;
+        result[3] = 0;
         return result;
     }
 }
@@ -188,11 +214,9 @@ void Optimizer::initsolver()
     // 初始化求解器
     solver.data()->setNumberOfVariables(Np + 2 * (Np + 1));
     solver.data()->setNumberOfConstraints(Np + 2 * (Np + 1));
-    solver.settings()->setAbsoluteTolerance(1e-4); // 设置绝对误差阈值
-    solver.settings()->setRelativeTolerance(1e-4); // 设置相对误差阈值
-    solver.settings()->setMaxIteration(100);       // 设置最大迭代次数为100
-    solver.settings()->setPolish(false);            // 启用解的后处理
-    solver.settings()->setScaling(10);             // 设置缩放因子
+    solver.settings()->setAbsoluteTolerance(1e-3); // 设置绝对误差阈值
+    solver.settings()->setRelativeTolerance(1e-3); // 设置相对误差阈值
+    solver.settings()->setMaxIteration(30);       // 设置最大迭代次数为100
     P = bigMatrix1.sparseView();
     // cout << bigMatrix1 << endl;
     // cout << P << endl;

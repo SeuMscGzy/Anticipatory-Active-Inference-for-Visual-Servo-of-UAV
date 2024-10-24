@@ -32,7 +32,11 @@ void RAID_AgiVS::timerCallback(const ros::TimerEvent &)
 {
     if (run_control_loop && timer_count < 4)
     {
-        function();    // 执行控制逻辑
+        auto start = std::chrono::high_resolution_clock::now();
+        function(); // 立即执行一次
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        ROS_INFO_STREAM("Function execution time: " << elapsed.count() << " seconds");
         timer_count++; // 增加计数
     }
     else

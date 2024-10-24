@@ -11,9 +11,9 @@ public:
     // parameters and variables for the optimization problem
     Optimizer optimizer_x;
     double dt = 0.01;
-    int Np = 20;
-    double precice_z1 = 4;
-    double precice_z2 = 0.1;
+    int Np = 30;
+    double precice_z1 = 2;
+    double precice_z2 = 1;
     double precice_w1 = 2;
     double precice_w2 = 2;
     double e1 = 3;
@@ -35,9 +35,9 @@ public:
     std_msgs::Float64MultiArray relative_pos;
 
     // variables for control logic
-    bool first_time_in_fun, loss_target, use_bias_, loss_or_not_;
+    bool first_time_in_fun, loss_target, loss_or_not_;
     int px4_state;
-    bool land_or_just_tracking = 0;
+    bool land_or_just_tracking = false;
     bool run_control_loop = false;
     bool keep_in_land = false;
 
@@ -50,7 +50,6 @@ public:
     // functions
     RAID_AgiVS(int index);
     void cal_optical_ctrl();
-    void cal_ctrl_input(double loss_or_not, bool use_bias);
     void timerCallback(const ros::TimerEvent &);
     void function(bool loss_or_not);
     void StateCallback(const std_msgs::Int32::ConstPtr &msg);

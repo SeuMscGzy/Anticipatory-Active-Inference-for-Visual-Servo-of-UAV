@@ -1,0 +1,46 @@
+sudo chmod 777 /dev/ttyACM0 & sleep 1;
+#source ~/test_ws/devel/setup.bash 
+#roscore & sleep 1;
+
+#动捕节点
+#roslaunch vrpn_client_ros sample.launch server:=192.168.0.132 & sleep 2;
+
+#底部相机节点
+roslaunch usb_cam usb_cam-test.launch & sleep 1;
+#rosrun testpkg testnode & sleep 1;
+
+#前部相机节点（与上述节点选择一个启动）
+#rosrun img_detect img_detect & sleep 1;
+
+#订阅动捕数据得到里程计
+#rosrun motion_cap_to_odom motion_cap_to_odom & sleep 2;
+
+#mavrso节点 并提升imu数据频率
+#roslaunch mavros px4.launch & sleep 2;
+roslaunch mavros px4.launch gcs_url:=udp://@10.193.119.163 & sleep 3;
+rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0 & sleep 1;
+rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0 & sleep 1;
+
+#将视觉定位发送给px4飞控
+#rosrun topic_tools relay /vrpn_client_node/MCServer/5/pose /mavros/vision_pose/pose & sleep 2;
+
+#计算世界系下的相对位置
+#rosrun visp_apriltah_detect apriltag_detect & sleep 1;
+
+#控制器节点
+#rosrun aic_plus_apo aic_plus_apo & sleep 1;
+#rosrun 2rd_aic_apo aic_plus_apo_2rd & sleep 1;
+#rosrun aic_apo_2rd_with_d aic_apo_2rd_with_d & sleep 1;
+#rosrun pid pid & sleep 1;
+#rosrun aic_with_d aic_with_d & sleep 1;
+
+#切换无人机跟踪偏置的节点
+#rosrun Keyboard_change_bias Keyboard_change_bias & sleep 1;
+
+#数据记录节点
+#rosrun record_curves record_curves & sleep 1;
+#rosrun video_creater video_creater & sleep 1;
+
+#无人机offboard状态机节点
+#roslaunch px4ctrl run_ctrl.launch & sleep 1
+wait;

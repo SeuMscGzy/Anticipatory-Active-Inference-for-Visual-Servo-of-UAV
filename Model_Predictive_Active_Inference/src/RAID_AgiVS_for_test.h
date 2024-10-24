@@ -1,7 +1,7 @@
 #include <ros/ros.h>
 #include <std_msgs/Float64.h>
 #include <std_msgs/Float64MultiArray.h>
-#include "mpai_qp_ty.h"
+#include "mpai_qp.h"
 #include <std_msgs/Int32.h>
 #include <std_msgs/Bool.h>
 #include <vector>
@@ -12,16 +12,16 @@ class RAID_AgiVS
 public:
     // parameters and variables for the optimization problem
     double dt = 0.01;
-    int Np = 20;
+    int Np = 40;
     double precice_z1 = 2;
-    double precice_z2 = 0.1;
+    double precice_z2 = 1;
     double precice_w1 = 2;
     double precice_w2 = 2;
-    double precice_z_u = 0.005;
-    double e1 = 5;
+    double precice_z_u = 0.003;
+    double e1 = 2;
     double umin = -4;
     double umax = 4;
-    vector<double> optical_solution = {0.0, 0.0, 0.0, 0.0};
+    vector<double> optical_solution = {0.0, 100.0, 0.0, 0.0};
     Optimizer optimizer;
 
     // parameters and variables for the APO

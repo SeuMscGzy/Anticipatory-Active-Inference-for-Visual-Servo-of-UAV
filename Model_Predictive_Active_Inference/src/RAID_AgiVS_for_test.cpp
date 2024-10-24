@@ -55,8 +55,8 @@ void RAID_AgiVS::function()
             hat_x(0) = y_real;
             first_in_callback = false;
         }
-        int mu = optical_solution[1];
-        int mu_p = optical_solution[2];
+        double mu = optical_solution[1];
+        double mu_p = optical_solution[2];
         optical_solution = optimizer.optimize(hat_x(0), hat_x(1), mu, mu_p);
         u = optical_solution[0];
     }
@@ -64,8 +64,8 @@ void RAID_AgiVS::function()
     {
         Eigen::Vector2d coeff(1, 0);
         predict_y = coeff.transpose() * (A0 * hat_x + B0 * u);
-        int mu = optical_solution[1];
-        int mu_p = optical_solution[2];
+        double mu = optical_solution[1];
+        double mu_p = optical_solution[2];
         optical_solution = optimizer.optimize(hat_x(0), hat_x(1), mu, mu_p);
         u = optical_solution[0];
     }

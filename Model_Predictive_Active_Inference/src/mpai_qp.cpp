@@ -121,6 +121,7 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
         bigR.block(2 * i, 2 * i, 2, 2) = R;
     }
     MatrixXd bigMatrix2_ = F.transpose() * bigR * T1;
+    //cout << bigMatrix2_ << endl;
     bigMatrix2 = bigMatrix2_;
     // Initialize the solver matrices
     initsolver();
@@ -152,25 +153,30 @@ void Optimizer::shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolutio
 
 vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_init_, double mu_p_init_)
 {
-    Eigen::RowVectorXd rowVec(2);
+    RowVectorXd rowVec(2);
     rowVec << x1_init_, x2_init_;
-    q = (rowVec * bigMatrix2).transpose();
+    q = rowVec * bigMatrix2;
     // cout << q << endl;
-    l[Np] = mu_init_;
-    u[Np] = mu_init_;
-    l[Np + 1] = mu_p_init_;
-    u[Np + 1] = mu_p_init_;
+    l[Np] = mu_init_-0.1;
+    u[Np] = mu_init_+0.1;
+    l[Np + 1] = mu_p_init_-0.1;
+    u[Np + 1] = mu_p_init_+0.1;
 
     // 更新求解器的梯度和边界
     solver.updateGradient(q);
     solver.updateLowerBound(l);
     solver.updateUpperBound(u);
 
+    // 在更新求解器的梯度和边界之前，打印 l 和 u
+    std::cout << "l: " << l.transpose() << std::endl;
+    std::cout << "u: " << u.transpose() << std::endl;
+
     // 求解更新后的问题
     auto sol_result = solver.solveProblem();
     if (sol_result == OsqpEigen::ErrorExitFlag::NoError)
     {
         VectorXd solution = solver.getSolution();
+       // cout << "solution: " << solution << endl;
         VectorXd Dualsolution = solver.getDualSolution();
 
         // Extracting u which has Np elements
@@ -205,12 +211,13 @@ void Optimizer::initsolver()
     // 初始化求解器
     solver.data()->setNumberOfVariables(Np + 2 * (Np + 1));
     solver.data()->setNumberOfConstraints(Np + 2);
-    solver.settings()->setAbsoluteTolerance(1e-3); // 设置绝对误差阈值
-    solver.settings()->setRelativeTolerance(1e-3); // 设置相对误差阈值
-    solver.settings()->setMaxIteration(100);        // 设置最大迭代次数为100
+    solver.settings()->setAbsoluteTolerance(2e-3); // 设置绝对误差阈值
+    solver.settings()->setRelativeTolerance(2e-3); // 设置相对误差阈值
+    solver.settings()->setMaxIteration(60);       // 设置最大迭代次数为100
+    solver.settings()->setVerbosity(false);
     P = bigMatrix1.sparseView();
     // cout << bigMatrix1 << endl;
-    // cout << P << endl;
+    //cout << P << endl;
     Eigen::VectorXd q1(Np + 2 * (Np + 1));
     q = q1;
 

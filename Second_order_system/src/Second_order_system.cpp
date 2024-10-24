@@ -78,7 +78,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     double dt = 0.001;
-    Second_order_system second_order_system(1, 0, 0);
+    Second_order_system second_order_system(100, 0, 0);
 
     ros::Subscriber sub = nh.subscribe("/input_x_axis", 1, &Second_order_system::input_callback, &second_order_system);
     ros::Publisher x_pub = nh.advertise<std_msgs::Float64MultiArray>("/x_state", 1);

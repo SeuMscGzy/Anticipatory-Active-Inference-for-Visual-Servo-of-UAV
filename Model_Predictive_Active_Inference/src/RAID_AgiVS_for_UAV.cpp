@@ -26,7 +26,7 @@ RAID_AgiVS::RAID_AgiVS(int index)
     B0 << 5.00000000000000e-05,
         0.0100000000000000;
     px4_state_sub = nh.subscribe("/px4_state_pub", 1, &RAID_AgiVS::StateCallback, this, ros::TransportHints().tcpNoDelay());
-    relative_pos_sub = nh.subscribe("/point_with_fixed_delay", 1, &RAID_AgiVS::relative_pos_Callback, this);
+    relative_pos_sub = nh.subscribe("/point_with_fixed_delay", 1, &RAID_AgiVS::relative_pos_Callback, this, ros::TransportHints().tcpNoDelay());
     timer = nh.createTimer(ros::Duration(0.01), &RAID_AgiVS::timerCallback, this);
     if (which_axis == 0)
     {
@@ -40,7 +40,6 @@ RAID_AgiVS::RAID_AgiVS(int index)
     {
         pub_u = nh.advertise<std_msgs::Float64>("/input_z_axis", 1);
     }
-    // pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
 }
 
 void RAID_AgiVS::timerCallback(const ros::TimerEvent &)
@@ -156,9 +155,6 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
                 timer_count = 0;
                 run_control_loop = true;
                 function(loss_or_not_);
-                /*std_msgs::Bool land_msg;
-                land_msg.data = false;
-                pub_land.publish(land_msg);*/
             }
             else
             {
@@ -167,15 +163,6 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
                 timer_count = 0;
                 run_control_loop = true;
                 function(loss_or_not_);
-                /*if ((msg->data[2] < 0.15 && msg->data[4] == 0 && px4_state == 3) || keep_in_land)
-                {
-                    // 发送强制着陆指令，因为可能快要看不到目标了，开环近距离着陆
-                    keep_in_land = true;
-                    std_msgs::Bool land_msg;
-                    land_msg.data = true;
-                    pub_land.publish(land_msg);
-                    cout << "land message sent" << endl;
-                }*/
             }
         }
         else
@@ -185,9 +172,6 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
             timer_count = 0;
             run_control_loop = true;
             function(loss_or_not_);
-            /*std_msgs::Bool land_msg;
-            land_msg.data = false;
-            pub_land.publish(land_msg);*/
         }
     }
 }

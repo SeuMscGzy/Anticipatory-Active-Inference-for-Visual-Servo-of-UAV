@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>aic_apo_2rd_with_d</name>
+  <name>Collect_xyz_Pub_acc</name>
   <version>0.0.0</version>
-  <description>The aic_apo_2rd_with_d package</description>
+  <description>The Collect_xyz_Pub_acc package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
   <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
-  <maintainer email="gzy@todo.todo">gzy</maintainer>
+  <maintainer email="orangepi@todo.todo">orangepi</maintainer>
 
 
   <!-- One license tag required, multiple allowed, one license per tag -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/aic_apo_2rd_with_d</url> -->
+  <!-- <url type="website">http://wiki.ros.org/Collect_xyz_Pub_acc</url> -->
 
 
   <!-- Author tags are optional, multiple are allowed, one per tag -->

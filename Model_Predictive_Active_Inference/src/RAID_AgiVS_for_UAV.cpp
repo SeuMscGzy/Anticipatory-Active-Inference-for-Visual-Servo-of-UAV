@@ -46,7 +46,7 @@ void RAID_AgiVS::timerCallback(const ros::TimerEvent &)
 {
     function(loss_or_not_); // 立即执行一次
     timer_count++;          // 增加计数
-    if (timer_count == 5)
+    if (timer_count == 5 || is_data_refreshed)
     {
         timer_count = 0;
     }
@@ -97,8 +97,9 @@ void RAID_AgiVS::function(bool loss_or_not_)
     }
     else
     {
-        if (timer_count == 0)
+        if (timer_count == 0 && is_data_refreshed)
         {
+            is_data_refreshed = false;
             predict_x = x_real;
             u_x = 0;
             hat_x = A_bar * hat_x_last + B_bar * u_x + C_bar * predict_x;
@@ -133,6 +134,7 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
 {
     relative_pos.data = msg->data;
     x_real = relative_pos.data[which_axis];
+    is_data_refreshed = true;
     if (px4_state != 3) // 不在cmd模式下时，控制量为0；
     {
         u_x = 0;

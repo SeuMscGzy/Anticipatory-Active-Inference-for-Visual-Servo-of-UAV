@@ -40,6 +40,7 @@ public:
     bool land_or_just_tracking = false;
     bool run_control_loop = false;
     bool keep_in_land = false;
+    bool is_data_refreshed = false;
 
     // ros related
     ros::NodeHandle nh;

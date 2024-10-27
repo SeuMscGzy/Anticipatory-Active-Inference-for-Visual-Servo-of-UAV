@@ -12,10 +12,6 @@
 using namespace std;
 using namespace Eigen;
 
-double data2[] = {-0.012299254251302336, -0.9997550667398611, -0.018399317184020714,
-                  -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
-                  -0.04586719128150388, 0.018945419570245543, -0.998767876856907};
-
 double fromQuaternion2yaw(Eigen::Quaterniond q)
 {
     double yaw = atan2(2 * (q.x() * q.y() + q.w() * q.z()),

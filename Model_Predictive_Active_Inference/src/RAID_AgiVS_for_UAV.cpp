@@ -44,14 +44,11 @@ RAID_AgiVS::RAID_AgiVS(int index)
 
 void RAID_AgiVS::timerCallback(const ros::TimerEvent &)
 {
-    if (run_control_loop && timer_count < 4)
+    function(loss_or_not_); // 立即执行一次
+    timer_count++;          // 增加计数
+    if (timer_count == 5)
     {
-        function(loss_or_not_); // 立即执行一次
-        timer_count++;          // 增加计数
-    }
-    else
-    {
-        run_control_loop = false;
+        timer_count = 0;
     }
 }
 
@@ -152,26 +149,17 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
             {
                 loss_or_not_ = relative_pos.data[4];
                 x_real = adjustBias(x_real, 1);
-                timer_count = 0;
-                run_control_loop = true;
-                function(loss_or_not_);
             }
             else
             {
                 loss_or_not_ = relative_pos.data[4];
                 x_real = adjustBias(x_real, 0);
-                timer_count = 0;
-                run_control_loop = true;
-                function(loss_or_not_);
             }
         }
         else
         {
             loss_or_not_ = relative_pos.data[4];
             x_real = adjustBias(x_real, 1);
-            timer_count = 0;
-            run_control_loop = true;
-            function(loss_or_not_);
         }
     }
 }

@@ -1,44 +1,28 @@
 #include <ros/ros.h>
-#include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/PoseArray.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <vector>
 #include <geometry_msgs/Twist.h>
 #include <std_msgs/Empty.h>
-#include <tf/transform_datatypes.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
-#include <std_msgs/Float64MultiArray.h>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <cmath>
 using namespace std;
+using namespace Eigen;
+
 double data2[] = {-0.012299254251302336, -0.9997550667398611, -0.018399317184020714,
-                  -0.9988718281685636, 0.011440175054767979, 0.046088971413001924, -0.04586719128150388, 0.018945419570245543, -0.998767876856907};
-tf::Matrix3x3 convertCvMatToTfMatrix(const cv::Mat &cv_matrix)
-{
-    tf::Matrix3x3 tf_matrix;
-    if (cv_matrix.rows == 3 && cv_matrix.cols == 3 && cv_matrix.type() == CV_64F)
-    {
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                tf_matrix[i][j] = cv_matrix.at<double>(i, j);
-            }
-        }
-    }
-    else
-    {
-        std::cerr << "Invalid matrix size or type" << std::endl;
-    }
-    return tf_matrix;
-} 
+                  -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
+                  -0.04586719128150388, 0.018945419570245543, -0.998767876856907};
+
 double fromQuaternion2yaw(Eigen::Quaterniond q)
 {
-    double yaw = atan2(2 * (q.x() * q.y() + q.w() * q.z()), q.w() * q.w() + q.x() * q.x() - q.y() * q.y() - q.z() * q.z());
+    double yaw = atan2(2 * (q.x() * q.y() + q.w() * q.z()),
+                       q.w() * q.w() + q.x() * q.x() - q.y() * q.y() - q.z() * q.z());
     return yaw;
 }
+
 class AprilTagDetector
 {
 private:
@@ -49,23 +33,37 @@ private:
     ros::Publisher point_pub_;
     ros::Subscriber R_subscriber;
     double image_time;
-    cv::Mat Position_before = cv::Mat::zeros(3, 1, CV_64F);
-    cv::Mat Position_after = cv::Mat::zeros(3, 1, CV_64F);
-    cv::Mat R = cv::Mat::eye(3, 3, CV_64F);
-    tf::Matrix3x3 R_c2a;
+    Eigen::Vector3d Position_before = Eigen::Vector3d::Zero();
+    Eigen::Vector3d Position_after = Eigen::Vector3d::Zero();
+    Eigen::Matrix3d R = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d R_c2a = Eigen::Matrix3d::Zero();
+    Eigen::Matrix3d rot_matrix3; // Ric imu到相机
     double desired_yaw;
 
 public:
     AprilTagDetector()
     {
         desired_yaw = 0;
-        cv::Mat tempMat(3, 3, CV_64F);
-        tempMat = cv::Mat(3, 3, CV_64F, data2);
-        R = tempMat;
-        image_sub_ = nh_.subscribe("/object_pose", 1, &AprilTagDetector::imageCb, this);
-        odom_sub_ = nh_.subscribe("/vins_fusion/imu_propagate", 1, &AprilTagDetector::odomCallback, this);
+        // 初始化 rot_matrix3
+        rot_matrix3 << -0.012299254251302336, -0.9997550667398611, -0.018399317184020714,
+            -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
+            -0.04586719128150388, 0.018945419570245543, -0.998767876856907;
+        R = rot_matrix3;
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
-        R_subscriber = nh_.subscribe("/R_data", 1, &AprilTagDetector::RCallback, this);
+        image_sub_ = nh_.subscribe<std_msgs::Float64MultiArray>(
+                        "/object_pose", 1,
+                        &AprilTagDetector::imageCb, this,
+                        ros::TransportHints().tcpNoDelay());
+
+        odom_sub_ = nh_.subscribe<nav_msgs::Odometry>(
+            "/vins_fusion/imu_propagate", 1,
+            &AprilTagDetector::odomCallback, this,
+            ros::TransportHints().tcpNoDelay());
+
+        R_subscriber = nh_.subscribe<std_msgs::Float64MultiArray>(
+            "/R_data", 1,
+            &AprilTagDetector::RCallback, this,
+            ros::TransportHints().tcpNoDelay());
     }
 
     ~AprilTagDetector()
@@ -74,8 +72,8 @@ public:
 
     void publishDetectionResult(bool lost)
     {
-        // 简化为直接赋值
-        point_.data = {Position_after.at<double>(0, 0), Position_after.at<double>(1, 0), Position_after.at<double>(2, 0), image_time, static_cast<double>(lost), desired_yaw};
+        point_.data = {Position_after(0), Position_after(1), Position_after(2),
+                       image_time, static_cast<double>(lost), desired_yaw};
         point_pub_.publish(point_);
         point_.data.clear();
     }
@@ -84,14 +82,9 @@ public:
     {
         if (msg->data.size() == 9)
         {
-            // 更新类中的旋转矩阵
-            for (int i = 0; i < 3; i++)
-            {
-                for (int j = 0; j < 3; j++)
-                {
-                    R_c2a[i][j] = msg->data[i * 3 + j];
-                }
-            }
+            // 使用 Eigen::Map 直接将数据映射到矩阵
+            Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> map_matrix(msg->data.data());
+            R_c2a = map_matrix;
         }
         else
         {
@@ -101,60 +94,37 @@ public:
 
     void odomCallback(const nav_msgs::Odometry::ConstPtr &msg)
     {
-        tf::Quaternion q1(
+        Eigen::Quaterniond q1(
+            msg->pose.pose.orientation.w,
             msg->pose.pose.orientation.x,
             msg->pose.pose.orientation.y,
-            msg->pose.pose.orientation.z,
-            msg->pose.pose.orientation.w);
-        tf::Matrix3x3 rot_matrix1(q1); // R_W2i  世界系到imu
-        tf::Matrix3x3 rot_matrix3(-0.012299254251302336, -0.9997550667398611, -0.018399317184020714,
-                  -0.9988718281685636, 0.011440175054767979, 0.046088971413001924, -0.04586719128150388, 0.018945419570245543, -0.998767876856907); // Ric imu到相机
-        tf::Matrix3x3 rot_matrix_cam_to_world;
-        rot_matrix_cam_to_world = rot_matrix1 * rot_matrix3;
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                R.at<double>(i, j) = rot_matrix_cam_to_world[i][j];
-            }
-        }
+            msg->pose.pose.orientation.z);
+
+        Eigen::Matrix3d rot_matrix1 = q1.toRotationMatrix(); // R_W2i  世界系到IMU
+        R = rot_matrix1 * rot_matrix3; //世界系到相机系
     }
+
     void imageCb(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
-        std_msgs::Float64MultiArray temp_array;
-        temp_array.data = msg->data;
-        image_time = temp_array.data[4];
-        // cout << "pos_recieve-img_recieve: " << 1000 * (ros::Time::now().toSec() - image_time) << " ms" << endl;
-        if (temp_array.data[3] == 1)
+        image_time = msg->data[4];
+        if (msg->data[3] == 1)
         {
-            Position_before.at<double>(0, 0) = temp_array.data[0] + 0.001125032938074339;
-            Position_before.at<double>(1, 0) = temp_array.data[1] - 0.04185436595006169;
-            Position_before.at<double>(2, 0) = temp_array.data[2] + 0.03678888970637513; // 将其转换到imu飞控所在位置
-            tf::Matrix3x3 R_tf = convertCvMatToTfMatrix(R);
-            tf::Matrix3x3 R_W2a = R_tf * R_c2a;
-            Eigen::Matrix3d eigen_mat;
-            for (int i = 0; i < 3; ++i)
-            {
-                for (int j = 0; j < 3; ++j)
-                {
-                    eigen_mat(i, j) = R_W2a[i][j];
-                }
-            }
-            Eigen::Quaterniond q;
-            q = Eigen::Quaterniond(eigen_mat);
+            Position_before(0) = msg->data[0] + 0.001125032938074339;
+            Position_before(1) = msg->data[1] - 0.04185436595006169;
+            Position_before(2) = msg->data[2] + 0.03678888970637513; // 转换到IMU所在位置
+            Position_after = R * Position_before;
+            Eigen::Matrix3d R_W2a = R * R_c2a;
+            Eigen::Quaterniond q(R_W2a);
             double yaw = fromQuaternion2yaw(q);
             yaw = yaw + M_PI / 2;
             cout << yaw << endl;
             desired_yaw = yaw;
-            // cout << "Position: (" << Position_before.at<double>(0, 0) << ", " << Position_before.at<double>(1, 0) << ", " << Position_before.at<double>(2, 0) << ")" << endl;
-            Position_after = R * Position_before;
-            // cout << "Position: (" << Position_after.at<double>(0, 0) << ", " << Position_after.at<double>(1, 0) << ", " << Position_after.at<double>(2, 0) << ")" << endl;
-            publishDetectionResult(false); // 提取的函数，用于发布检测结果
+            publishDetectionResult(false);
         }
         else
         {
             desired_yaw = 0;
-            publishDetectionResult(true); // 提取的函数，用于发布检测结果
+            publishDetectionResult(true);
         }
     }
 };

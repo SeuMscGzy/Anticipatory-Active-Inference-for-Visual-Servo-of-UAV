@@ -49,7 +49,7 @@ public:
         align_frame = false;
         display_off = true;
 
-        //parseCommandLineArgs();
+        // parseCommandLineArgs();
         initializeCameraParameters();
         setupDetector();
 
@@ -59,7 +59,7 @@ public:
         R_publisher = nh_.advertise<std_msgs::Float64MultiArray>("/R_data", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
-
+        worker_thread = std::thread(&ObjectDetector::processImages, this);
         ros_pbvs_msg.data.resize(6, 0.0);
         R_msg.data.resize(9);
     }
@@ -239,6 +239,7 @@ private:
             }
             vpImageConvert::convert(distorted_image, I_write);
             swapBuffers();
+            cout << "image callback" << endl;
         }
         catch (cv_bridge::Exception &e)
         {
@@ -254,12 +255,11 @@ private:
         {
             return;
         }
-
-        // 锁住最新图像
         else
         {
             processing = true; // 标志设置为正在处理
         }
+        //cout << processing << endl;
     }
 
     void processImages()
@@ -268,6 +268,7 @@ private:
         {
             if (processing)
             {
+                std::chrono::time_point<std::chrono::high_resolution_clock> image_timestamp_temp = image_timestamp;
                 std::vector<vpHomogeneousMatrix> cMo_vec;
                 vpHomogeneousMatrix pose_matrix;
                 vpImageFilter::gaussianFilter(I_read, 3, 3);
@@ -329,11 +330,13 @@ private:
                     ros_pbvs_msg.data[4] = ros::Time::now().toSec();
                     std::cout << "lost!!!!!!" << std::endl;
                 }
-                auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp);
+                auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 if (delay.count() > 0)
                 {
                     std::this_thread::sleep_for(delay);
                 }
+                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                cout << delay2.count() << endl;
                 pbvs_publisher.publish(ros_pbvs_msg);
                 R_publisher.publish(R_msg);
                 processing = false;
@@ -349,8 +352,8 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "object_detector");
     argc_ = argc;
     argv_ = argv;
-    cout << "argc: " << argc << endl;
-    cout << "argv: " << argv << endl;
+    cout << "argc: " << argc_ << endl;
+    cout << "argv: " << argv_ << endl;
     ros::NodeHandle nh;
     ObjectDetector detector(nh);
     detector.start();

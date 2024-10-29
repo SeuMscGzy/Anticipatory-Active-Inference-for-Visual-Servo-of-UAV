@@ -10,7 +10,6 @@
 #include <visp3/gui/vpDisplayX.h>
 #include <visp3/core/vpXmlParserCamera.h>
 #include <std_msgs/Float64MultiArray.h>
-#include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <visp3/vision/vpPose.h>
@@ -45,7 +44,7 @@ class ObjectDetector
 {
 public:
     ObjectDetector(ros::NodeHandle &nh)
-        : image_transport(nh), nh_(nh), stop_thread(false), processing(false), desired_yaw(0)
+        : nh_(nh), stop_thread(false), processing(false), desired_yaw(0)
     {
         // 参数初始化
         opt_device = 0;
@@ -65,9 +64,8 @@ public:
         R_i2c << -0.012299254251302336, -0.9997550667398611, -0.018399317184020714,
             -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
             -0.04586719128150388, 0.018945419570245543, -0.998767876856907;
-        R_w2i = Eigen::Matrix3d::Identity();
-        R_w2c = Eigen::Matrix3d::Identity();
         R_w2a = Eigen::Matrix3d::Identity();
+        R_w2c_ptr = make_shared<Eigen::Matrix3d>(Eigen::Matrix3d::Identity());
 
         // parseCommandLineArgs();
         initializeCameraParameters();
@@ -81,7 +79,6 @@ public:
         // ROS topic和服务
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
         cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
-        R_publisher = nh_.advertise<std_msgs::Float64MultiArray>("/R_data", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
         timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
@@ -106,10 +103,8 @@ public:
 
 private:
     ros::NodeHandle nh_;
-    image_transport::ImageTransport image_transport;
     ros::Publisher point_pub_;
     ros::Publisher cv_image_pub;
-    ros::Publisher R_publisher;
     ros::Subscriber imgsub;
     ros::Subscriber odom_sub_;
     ros::Timer timer;
@@ -146,11 +141,10 @@ private:
     map<int, double> tagSizes = {{0, 0.0254}, {1, 0.081}};
     double desired_yaw;
     Eigen::Vector3d Position_after;
-    Eigen::Matrix3d R_c2a; // Rca 相机到apriltag
-    Eigen::Matrix3d R_i2c; // Ric imu到相机
-    Eigen::Matrix3d R_w2i; // Rwi 世界到imu
-    Eigen::Matrix3d R_w2c; // Rwc 世界到相机
-    Eigen::Matrix3d R_w2a; // Rwa 世界到apriltag
+    Eigen::Matrix3d R_c2a;                 // Rca 相机到apriltag
+    Eigen::Matrix3d R_i2c;                 // Ric imu到相机
+    shared_ptr<Eigen::Matrix3d> R_w2c_ptr; // Rwc 世界到相机
+    Eigen::Matrix3d R_w2a;                 // Rwa 世界到apriltag
     std_msgs::Float64MultiArray point_;
 
     void swapBuffers()
@@ -158,6 +152,22 @@ private:
         // 使用 std::atomic_store 进行线程安全的交换
         auto current_write_ptr = atomic_load(&write_image_ptr);
         atomic_store(&read_image_ptr, current_write_ptr);
+    }
+
+    // 获取矩阵副本（线程安全）
+    Eigen::Matrix3d getMatrix()
+    {
+        auto current_ptr = atomic_load(&R_w2c_ptr);
+        return *current_ptr; // Return a copy of the current matrix
+    }
+
+    // 更新矩阵（线程安全）
+    void updateMatrix(const Eigen::Matrix3d &new_matrix)
+    {
+        // Create a new shared_ptr with the updated matrix
+        auto new_ptr = make_shared<Eigen::Matrix3d>(new_matrix);
+        // Atomically store the new pointer
+        atomic_store(&R_w2c_ptr, new_ptr);
     }
 
     /*int parseCommandLineArgs()
@@ -327,9 +337,7 @@ private:
             msg->pose.pose.orientation.x,
             msg->pose.pose.orientation.y,
             msg->pose.pose.orientation.z);
-
-        R_w2i = q1.toRotationMatrix(); //
-        R_w2c = R_w2i * R_i2c;         // 世界系到相机系
+        updateMatrix(q1.toRotationMatrix() * R_i2c); // 世界系到相机系
     }
 
     void processImages()
@@ -340,6 +348,7 @@ private:
             {
                 auto image_ptr = atomic_load(&read_image_ptr);
                 chrono::time_point<high_resolution_clock> image_timestamp_temp = image_timestamp;
+                Eigen::Matrix3d R_w2c_temp = getMatrix();
                 if (image_ptr && image_ptr->getHeight() > 0 && image_ptr->getWidth() > 0)
                 {
                     // 对图像进行处理
@@ -382,20 +391,15 @@ private:
                             }
                         }
                         pose_matrix = cMo_vec[0];
-                        vpRotationMatrix R_vp;
-                        pose_matrix.extract(R_vp);
-                        for (int i = 0; i < 3; i++)
-                        {
-                            for (int j = 0; j < 3; j++)
-                            {
-                                R_c2a(i * 3 + j) = R_vp[i][j];
-                            }
-                        }
-                        R_w2a = R_w2c * R_c2a;
+                        vpRotationMatrix R_c2a_vp;
+                        pose_matrix.extract(R_c2a_vp);
+                        Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R_c2a_map(R_c2a.data());
+                        R_c2a_map = Eigen::Matrix3d::Map(&R_c2a_vp[0][0]);
+                        R_w2a = R_w2c_temp * R_c2a;
                         if (ids.size() == 2 || ids[0] == 1)
                         {
                             Eigen::Vector3d t(0, -0.0584, 0);
-                            t = R_w2c * t;
+                            t = R_w2c_temp * t;
                             Position_after(0) = pose_matrix[0][3] - t[0];
                             Position_after(1) = pose_matrix[1][3] - t[1];
                             Position_after(2) = pose_matrix[2][3] - t[2];
@@ -406,7 +410,7 @@ private:
                             Position_after(1) = pose_matrix[1][3];
                             Position_after(2) = pose_matrix[2][3];
                         }
-                        Position_after = R_w2c * Position_after;
+                        Position_after = R_w2c_temp * Position_after;
                         Eigen::Quaterniond q(R_w2a);
                         double yaw = fromQuaternion2yaw(q);
                         yaw = yaw + M_PI / 2;

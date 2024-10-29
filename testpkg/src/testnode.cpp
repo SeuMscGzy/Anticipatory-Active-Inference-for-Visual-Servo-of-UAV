@@ -59,7 +59,7 @@ public:
         R_publisher = nh_.advertise<std_msgs::Float64MultiArray>("/R_data", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
-        worker_thread = std::thread(&ObjectDetector::processImages, this);
+        worker_thread = thread(&ObjectDetector::processImages, this);
         ros_pbvs_msg.data.resize(6, 0.0);
         R_msg.data.resize(9);
     }
@@ -89,13 +89,13 @@ private:
     ros::Subscriber imgsub;
     ros::Timer timer;
 
-    std::chrono::time_point<std::chrono::high_resolution_clock> image_timestamp;
+    time_point<high_resolution_clock> image_timestamp;
     vpImage<unsigned char> I_read;  // 用于读取的缓冲
     vpImage<unsigned char> I_write; // 用于写入的缓冲
-    std::mutex buffer_mutex;
-    std::thread worker_thread;
-    std::atomic<bool> stop_thread;
-    std::atomic<bool> processing;
+    mutex buffer_mutex;
+    thread worker_thread;
+    atomic<bool> stop_thread;
+    atomic<bool> processing;
     std_msgs::Float64MultiArray ros_pbvs_msg;
     std_msgs::Float64MultiArray R_msg;
 
@@ -104,8 +104,8 @@ private:
     double tagSize;
     float quad_decimate;
     int nThreads;
-    std::string intrinsic_file;
-    std::string camera_name;
+    string intrinsic_file;
+    string camera_name;
     bool display_tag;
     int color_id;
     unsigned int thickness;
@@ -113,72 +113,73 @@ private:
     bool display_off;
     vpCameraParameters cam;
     vpXmlParserCamera parser;
+    map<int, double> tagSizes = {{0, 0.0254}, {1, 0.081}};
 
     void swapBuffers()
     {
-        std::lock_guard<std::mutex> lock(buffer_mutex);
-        std::swap(I_read, I_write);
+        lock_guard<mutex> lock(buffer_mutex);
+        swap(I_read, I_write);
     }
 
     int parseCommandLineArgs()
     {
         for (int i = 1; i < argc_; i++)
         {
-            if (std::string(argv_[i]) == "--pose_method" && i + 1 < argc_)
+            if (string(argv_[i]) == "--pose_method" && i + 1 < argc_)
             {
                 poseEstimationMethod = (vpDetectorAprilTag::vpPoseEstimationMethod)atoi(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--tag_size" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--tag_size" && i + 1 < argc_)
             {
                 tagSize = atof(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--camera_device" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--camera_device" && i + 1 < argc_)
             {
                 opt_device = atoi(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--quad_decimate" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--quad_decimate" && i + 1 < argc_)
             {
                 quad_decimate = (float)atof(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--nthreads" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--nthreads" && i + 1 < argc_)
             {
                 nThreads = atoi(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--intrinsic" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--intrinsic" && i + 1 < argc_)
             {
-                intrinsic_file = std::string(argv_[i + 1]);
+                intrinsic_file = string(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--camera_name" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--camera_name" && i + 1 < argc_)
             {
-                camera_name = std::string(argv_[i + 1]);
+                camera_name = string(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--display_tag")
+            else if (string(argv_[i]) == "--display_tag")
             {
                 display_tag = true;
             }
-            else if (std::string(argv_[i]) == "--display_off")
+            else if (string(argv_[i]) == "--display_off")
             {
                 display_off = true;
             }
-            else if (std::string(argv_[i]) == "--color" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--color" && i + 1 < argc_)
             {
                 color_id = atoi(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--thickness" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--thickness" && i + 1 < argc_)
             {
                 thickness = (unsigned int)atoi(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--tag_family" && i + 1 < argc_)
+            else if (string(argv_[i]) == "--tag_family" && i + 1 < argc_)
             {
                 tagFamily = (vpDetectorAprilTag::vpAprilTagFamily)atoi(argv_[i + 1]);
             }
-            else if (std::string(argv_[i]) == "--z_aligned")
+            else if (string(argv_[i]) == "--z_aligned")
             {
                 align_frame = true;
             }
-            else if (std::string(argv_[i]) == "--help" || std::string(argv_[i]) == "-h")
+            else if (string(argv_[i]) == "--help" || string(argv_[i]) == "-h")
             {
-                std::cout << "Usage: " << argv_[0]
+                cout << "Usage: " << argv_[0]
                           << " [--camera_device <camera device> (default: 0)]"
                           << " [--tag_size <tag_size in m> (default: 0.053)]"
                              " [--quad_decimate <quad_decimate> (default: 1)]"
@@ -192,8 +193,8 @@ private:
                              " 3: TAG_25h9, 4: TAG_25h7 (DEPRECATED), 5: TAG_16h5, 6: TAG_CIRCLE21h7, 7: TAG_CIRCLE49h12,"
                              " 8: TAG_CUSTOM48h12, 9: TAG_STANDARD41h12, 10: TAG_STANDARD52h13) (default: 0)]"
                              " [--display_tag] [--z_aligned]";
-                std::cout << " [--display_off] [--color <color id>] [--thickness <line thickness>]";
-                std::cout << " [--help]" << std::endl;
+                cout << " [--display_off] [--color <color id>] [--thickness <line thickness>]";
+                cout << " [--help]" << endl;
                 return EXIT_SUCCESS;
             }
         }
@@ -206,11 +207,11 @@ private:
         {
             parser.parse(cam, intrinsic_file, camera_name, vpCameraParameters::perspectiveProjWithoutDistortion);
         }
-        std::cout << cam << std::endl;
-        std::cout << "poseEstimationMethod: " << poseEstimationMethod << std::endl;
-        std::cout << "tagFamily: " << tagFamily << std::endl;
-        std::cout << "nThreads : " << nThreads << std::endl;
-        std::cout << "Z aligned: " << align_frame << std::endl;
+        cout << cam << endl;
+        cout << "poseEstimationMethod: " << poseEstimationMethod << endl;
+        cout << "tagFamily: " << tagFamily << endl;
+        cout << "nThreads : " << nThreads << endl;
+        cout << "Z aligned: " << align_frame << endl;
         vpDisplay *d = NULL;
         if (!display_off)
         {
@@ -239,7 +240,7 @@ private:
             }
             vpImageConvert::convert(distorted_image, I_write);
             swapBuffers();
-            cout << "image callback" << endl;
+            // cout << "image callback" << endl;
         }
         catch (cv_bridge::Exception &e)
         {
@@ -251,25 +252,25 @@ private:
     void timerCallback(const ros::TimerEvent &)
     {
         // 如果当前线程还在处理，则不执行新任务
-        if (processing)
+        if (processing.load(memory_order_acquire))
         {
             return;
         }
         else
         {
-            processing = true; // 标志设置为正在处理
+            processing.store(true, memory_order_release); // 标志设置为正在处理
         }
-        //cout << processing << endl;
+        // cout << processing << endl;
     }
 
     void processImages()
     {
-        while (!stop_thread)
+        while (!stop_thread.load(memory_order_acquire))
         {
-            if (processing)
+            if (processing.load(memory_order_acquire))
             {
-                std::chrono::time_point<std::chrono::high_resolution_clock> image_timestamp_temp = image_timestamp;
-                std::vector<vpHomogeneousMatrix> cMo_vec;
+                chrono::time_point<high_resolution_clock> image_timestamp_temp = image_timestamp;
+                vector<vpHomogeneousMatrix> cMo_vec;
                 vpHomogeneousMatrix pose_matrix;
                 vpImageFilter::gaussianFilter(I_read, 3, 3);
                 cv::Mat imageMat;
@@ -281,11 +282,13 @@ private:
                 cv_image_pub.publish(msg);
 
                 detector_.detect(I_read);
-                std::map<int, double> tagSizes = {{0, 0.0254}, {1, 0.081}};
-                std::vector<int> ids = detector_.getTagsId();
+                vector<int> ids = detector_.getTagsId();
                 if (ids.size() == 0)
                 {
-                    // 没有检测到标签
+                    R_msg.data = {1, 0, 0, 0, -1, 0, 0, 0, -1};
+                    ros_pbvs_msg.data[3] = 0;
+                    ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
+                    cout << "lost!!!!!!" << endl;
                 }
                 else
                 {
@@ -296,15 +299,15 @@ private:
                         {
                             continue;
                         }
-                        double tagSize = tagSizes[id];
-                        vpHomogeneousMatrix cMo;
-                        detector_.getPose(i, tagSize, cam, cMo);
-                        cMo_vec.push_back(cMo);
+                        else
+                        {
+                            double tagSize = tagSizes[id];
+                            vpHomogeneousMatrix cMo;
+                            detector_.getPose(i, tagSize, cam, cMo);
+                            cMo_vec.push_back(cMo);
+                            break;
+                        }
                     }
-                }
-
-                if (!cMo_vec.empty())
-                {
                     pose_matrix = cMo_vec[0];
                     vpRotationMatrix R;
                     pose_matrix.extract(R);
@@ -315,34 +318,48 @@ private:
                             R_msg.data[i * 3 + j] = R[i][j];
                         }
                     }
-                    vpTranslationVector t(0, -0.0584, 0);
-                    t = R * t;
-                    ros_pbvs_msg.data[0] = pose_matrix[0][3] - t[0];
-                    ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
-                    ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
+                    if (ids.size() == 2)
+                    {
+                        vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
+                        t = R * t;                            // Perform the matrix-vector multiplication
+                        ros_pbvs_msg.data[0] = pose_matrix[0][3] - t[0];
+                        ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
+                        ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
+                    }
+                    else
+                    {
+                        if (ids[0] == 0)
+                        {
+                            ros_pbvs_msg.data[0] = pose_matrix[0][3];
+                            ros_pbvs_msg.data[1] = pose_matrix[1][3];
+                            ros_pbvs_msg.data[2] = pose_matrix[2][3];
+                        }
+                        else
+                        {
+                            vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
+                            t = R * t;                            // Perform the matrix-vector multiplication
+                            ros_pbvs_msg.data[0] = pose_matrix[0][3] - t[0];
+                            ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
+                            ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
+                        }
+                    }
+                    // cout << R << endl; // Rca 相机到apriltag
                     ros_pbvs_msg.data[3] = 1;
-                    ros_pbvs_msg.data[4] = ros::Time::now().toSec();
-                }
-                else
-                {
-                    R_msg.data = {1, 0, 0, 0, -1, 0, 0, 0, -1};
-                    ros_pbvs_msg.data[3] = 0;
-                    ros_pbvs_msg.data[4] = ros::Time::now().toSec();
-                    std::cout << "lost!!!!!!" << std::endl;
+                    ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
                 }
                 auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 if (delay.count() > 0)
                 {
-                    std::this_thread::sleep_for(delay);
+                    this_thread::sleep_for(delay);
                 }
                 auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 cout << delay2.count() << endl;
                 pbvs_publisher.publish(ros_pbvs_msg);
                 R_publisher.publish(R_msg);
-                processing = false;
+                processing.store(false, memory_order_release);
             }
             // 让线程稍作休息，避免空转
-            std::this_thread::sleep_for(std::chrono::microseconds(100)); // 休眠 0.1 毫秒
+            this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒
         }
     }
 };

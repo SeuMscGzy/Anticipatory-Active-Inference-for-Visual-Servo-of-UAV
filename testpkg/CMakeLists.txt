@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
 )
 find_package(OpenCV REQUIRED)
+find_package(Eigen3 REQUIRED) 
 include_directories(${OpenCV_INCLUDE_DIRS})
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -153,6 +154,7 @@ add_executable(testnode src/testnode.cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(testnode
    ${catkin_LIBRARIES}
+   Eigen3::Eigen
  )
  target_link_libraries(testnode ${OpenCV_LIBS})
  target_link_libraries(testnode ${VISP_LIBRARIES})

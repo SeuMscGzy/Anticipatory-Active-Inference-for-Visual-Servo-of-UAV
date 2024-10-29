@@ -23,19 +23,29 @@
 #include <opencv2/opencv.hpp>
 #include <thread>
 #include <mutex>
-int argc_;
-char **argv_;
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+#include <nav_msgs/Odometry.h>
+#include <std_msgs/Float64MultiArray.h>
+
 using namespace std;
 using namespace std::chrono;
 
 vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
 vpDetectorAprilTag detector_(tagFamily);
 
+double fromQuaternion2yaw(Eigen::Quaterniond q)
+{
+    double yaw = atan2(2 * (q.x() * q.y() + q.w() * q.z()),
+                       q.w() * q.w() + q.x() * q.x() - q.y() * q.y() - q.z() * q.z());
+    return yaw;
+}
+
 class ObjectDetector
 {
 public:
     ObjectDetector(ros::NodeHandle &nh)
-        : image_transport(nh), nh_(nh), stop_thread(false), processing(false)
+        : image_transport(nh), nh_(nh), stop_thread(false), processing(false), desired_yaw(0)
     {
         // 参数初始化
         opt_device = 0;
@@ -49,6 +59,16 @@ public:
         align_frame = false;
         display_off = true;
 
+        Position_after = Eigen::Vector3d::Zero();
+
+        R_c2a = Eigen::Matrix3d::Identity();
+        R_i2c << -0.012299254251302336, -0.9997550667398611, -0.018399317184020714,
+            -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
+            -0.04586719128150388, 0.018945419570245543, -0.998767876856907;
+        R_w2i = Eigen::Matrix3d::Identity();
+        R_w2c = Eigen::Matrix3d::Identity();
+        R_w2a = Eigen::Matrix3d::Identity();
+
         // parseCommandLineArgs();
         initializeCameraParameters();
         setupDetector();
@@ -59,14 +79,13 @@ public:
         atomic_store(&read_image_ptr, initial_image);
 
         // ROS topic和服务
-        pbvs_publisher = nh_.advertise<std_msgs::Float64MultiArray>("/object_pose", 1);
+        point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
         cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
         R_publisher = nh_.advertise<std_msgs::Float64MultiArray>("/R_data", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
+        odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
         timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
         worker_thread = thread(&ObjectDetector::processImages, this);
-        ros_pbvs_msg.data.resize(6, 0.0);
-        R_msg.data.resize(9);
     }
 
     ~ObjectDetector()
@@ -88,10 +107,11 @@ public:
 private:
     ros::NodeHandle nh_;
     image_transport::ImageTransport image_transport;
-    ros::Publisher pbvs_publisher;
+    ros::Publisher point_pub_;
     ros::Publisher cv_image_pub;
     ros::Publisher R_publisher;
     ros::Subscriber imgsub;
+    ros::Subscriber odom_sub_;
     ros::Timer timer;
 
     time_point<high_resolution_clock> image_timestamp;
@@ -107,9 +127,6 @@ private:
     atomic<bool> stop_thread;
     atomic<bool> processing;
 
-    std_msgs::Float64MultiArray ros_pbvs_msg;
-    std_msgs::Float64MultiArray R_msg;
-
     int opt_device;
     vpDetectorAprilTag::vpPoseEstimationMethod poseEstimationMethod;
     double tagSize;
@@ -124,7 +141,17 @@ private:
     bool display_off;
     vpCameraParameters cam;
     vpXmlParserCamera parser;
+
+    bool lost_target = true;
     map<int, double> tagSizes = {{0, 0.0254}, {1, 0.081}};
+    double desired_yaw;
+    Eigen::Vector3d Position_after;
+    Eigen::Matrix3d R_c2a; // Rca 相机到apriltag
+    Eigen::Matrix3d R_i2c; // Ric imu到相机
+    Eigen::Matrix3d R_w2i; // Rwi 世界到imu
+    Eigen::Matrix3d R_w2c; // Rwc 世界到相机
+    Eigen::Matrix3d R_w2a; // Rwa 世界到apriltag
+    std_msgs::Float64MultiArray point_;
 
     void swapBuffers()
     {
@@ -133,7 +160,7 @@ private:
         atomic_store(&read_image_ptr, current_write_ptr);
     }
 
-    int parseCommandLineArgs()
+    /*int parseCommandLineArgs()
     {
         for (int i = 1; i < argc_; i++)
         {
@@ -210,7 +237,7 @@ private:
                 return EXIT_SUCCESS;
             }
         }
-    }
+    }*/
 
     void initializeCameraParameters()
     {
@@ -238,6 +265,14 @@ private:
         detector_.setAprilTagNbThreads(nThreads);
         detector_.setDisplayTag(display_tag, color_id < 0 ? vpColor::none : vpColor::getColor(color_id), thickness);
         detector_.setZAlignedWithCameraAxis(align_frame);
+    }
+
+    void publishDetectionResult(chrono::time_point<high_resolution_clock> &image_timestamp_)
+    {
+        point_.data = {Position_after(0), Position_after(1), Position_after(2),
+                       image_timestamp_.time_since_epoch().count(), static_cast<double>(lost_target), desired_yaw};
+        point_pub_.publish(point_);
+        point_.data.clear();
     }
 
     void imageCallback(const sensor_msgs::ImageConstPtr &msg)
@@ -285,6 +320,18 @@ private:
         // cout << processing << endl;
     }
 
+    void odomCallback(const nav_msgs::Odometry::ConstPtr &msg)
+    {
+        Eigen::Quaterniond q1(
+            msg->pose.pose.orientation.w,
+            msg->pose.pose.orientation.x,
+            msg->pose.pose.orientation.y,
+            msg->pose.pose.orientation.z);
+
+        R_w2i = q1.toRotationMatrix(); //
+        R_w2c = R_w2i * R_i2c;         // 世界系到相机系
+    }
+
     void processImages()
     {
         while (!stop_thread.load(memory_order_acquire))
@@ -292,10 +339,10 @@ private:
             if (processing.load(memory_order_acquire))
             {
                 auto image_ptr = atomic_load(&read_image_ptr);
+                chrono::time_point<high_resolution_clock> image_timestamp_temp = image_timestamp;
                 if (image_ptr && image_ptr->getHeight() > 0 && image_ptr->getWidth() > 0)
                 {
                     // 对图像进行处理
-                    chrono::time_point<high_resolution_clock> image_timestamp_temp = image_timestamp;
                     vector<vpHomogeneousMatrix> cMo_vec;
                     vpHomogeneousMatrix pose_matrix;
                     vpImageFilter::gaussianFilter(*image_ptr, 3, 3);
@@ -311,13 +358,13 @@ private:
                     vector<int> ids = detector_.getTagsId();
                     if (ids.size() == 0)
                     {
-                        R_msg.data = {1, 0, 0, 0, -1, 0, 0, 0, -1};
-                        ros_pbvs_msg.data[3] = 0;
-                        ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
+                        desired_yaw = 0;
+                        lost_target = true;
                         cout << "lost!!!!!!" << endl;
                     }
                     else
                     {
+                        lost_target = false;
                         for (size_t i = 0; i < ids.size(); i++)
                         {
                             int id = ids[i];
@@ -335,54 +382,45 @@ private:
                             }
                         }
                         pose_matrix = cMo_vec[0];
-                        vpRotationMatrix R;
-                        pose_matrix.extract(R);
+                        vpRotationMatrix R_vp;
+                        pose_matrix.extract(R_vp);
                         for (int i = 0; i < 3; i++)
                         {
                             for (int j = 0; j < 3; j++)
                             {
-                                R_msg.data[i * 3 + j] = R[i][j];
+                                R_c2a(i * 3 + j) = R_vp[i][j];
                             }
                         }
-                        if (ids.size() == 2)
+                        R_w2a = R_w2c * R_c2a;
+                        if (ids.size() == 2 || ids[0] == 1)
                         {
-                            vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
-                            t = R * t;                            // Perform the matrix-vector multiplication
-                            ros_pbvs_msg.data[0] = pose_matrix[0][3] - t[0];
-                            ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
-                            ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
+                            Eigen::Vector3d t(0, -0.0584, 0);
+                            t = R_w2c * t;
+                            Position_after(0) = pose_matrix[0][3] - t[0];
+                            Position_after(1) = pose_matrix[1][3] - t[1];
+                            Position_after(2) = pose_matrix[2][3] - t[2];
                         }
                         else
                         {
-                            if (ids[0] == 0)
-                            {
-                                ros_pbvs_msg.data[0] = pose_matrix[0][3];
-                                ros_pbvs_msg.data[1] = pose_matrix[1][3];
-                                ros_pbvs_msg.data[2] = pose_matrix[2][3];
-                            }
-                            else
-                            {
-                                vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
-                                t = R * t;                            // Perform the matrix-vector multiplication
-                                ros_pbvs_msg.data[0] = pose_matrix[0][3] - t[0];
-                                ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
-                                ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
-                            }
+                            Position_after(0) = pose_matrix[0][3];
+                            Position_after(1) = pose_matrix[1][3];
+                            Position_after(2) = pose_matrix[2][3];
                         }
-                        // cout << R << endl; // Rca 相机到apriltag
-                        ros_pbvs_msg.data[3] = 1;
-                        ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
+                        Position_after = R_w2c * Position_after;
+                        Eigen::Quaterniond q(R_w2a);
+                        double yaw = fromQuaternion2yaw(q);
+                        yaw = yaw + M_PI / 2;
+                        desired_yaw = yaw;
                     }
-                    auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                    if (delay.count() > 0)
-                    {
-                        this_thread::sleep_for(delay);
-                    }
-                    auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                    cout << delay2.count() << endl;
-                    pbvs_publisher.publish(ros_pbvs_msg);
-                    R_publisher.publish(R_msg);
                 }
+                auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                if (delay.count() > 0)
+                {
+                    this_thread::sleep_for(delay);
+                }
+                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                cout << delay2.count() << endl;
+                publishDetectionResult(image_timestamp_temp);
                 processing.store(false, memory_order_release);
             }
             // 让线程稍作休息，避免空转
@@ -394,10 +432,6 @@ private:
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "object_detector");
-    argc_ = argc;
-    argv_ = argv;
-    cout << "argc: " << argc_ << endl;
-    cout << "argv: " << argv_ << endl;
     ros::NodeHandle nh;
     ObjectDetector detector(nh);
     detector.start();

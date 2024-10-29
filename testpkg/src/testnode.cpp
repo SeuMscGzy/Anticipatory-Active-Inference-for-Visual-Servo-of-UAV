@@ -35,7 +35,7 @@ class ObjectDetector
 {
 public:
     ObjectDetector(ros::NodeHandle &nh)
-        : image_transport(nh), nh_(nh), I_read(600, 800), I_write(600, 800), stop_thread(false), processing(false)
+        : image_transport(nh), nh_(nh), stop_thread(false), processing(false)
     {
         // 参数初始化
         opt_device = 0;
@@ -52,6 +52,11 @@ public:
         // parseCommandLineArgs();
         initializeCameraParameters();
         setupDetector();
+
+        // 初始化图像缓冲区
+        auto initial_image = make_shared<vpImage<unsigned char>>(600, 800);
+        atomic_store(&write_image_ptr, initial_image);
+        atomic_store(&read_image_ptr, initial_image);
 
         // ROS topic和服务
         pbvs_publisher = nh_.advertise<std_msgs::Float64MultiArray>("/object_pose", 1);
@@ -90,12 +95,18 @@ private:
     ros::Timer timer;
 
     time_point<high_resolution_clock> image_timestamp;
-    vpImage<unsigned char> I_read;  // 用于读取的缓冲
-    vpImage<unsigned char> I_write; // 用于写入的缓冲
-    mutex buffer_mutex;
+
+    // 图像缓冲区指针
+    shared_ptr<vpImage<unsigned char>> write_image_ptr;
+    shared_ptr<vpImage<unsigned char>> read_image_ptr;
+
+    atomic_flag buffer_lock = ATOMIC_FLAG_INIT;
+
     thread worker_thread;
+
     atomic<bool> stop_thread;
     atomic<bool> processing;
+
     std_msgs::Float64MultiArray ros_pbvs_msg;
     std_msgs::Float64MultiArray R_msg;
 
@@ -117,8 +128,9 @@ private:
 
     void swapBuffers()
     {
-        lock_guard<mutex> lock(buffer_mutex);
-        swap(I_read, I_write);
+        // 使用 std::atomic_store 进行线程安全的交换
+        auto current_write_ptr = atomic_load(&write_image_ptr);
+        atomic_store(&read_image_ptr, current_write_ptr);
     }
 
     int parseCommandLineArgs()
@@ -180,19 +192,19 @@ private:
             else if (string(argv_[i]) == "--help" || string(argv_[i]) == "-h")
             {
                 cout << "Usage: " << argv_[0]
-                          << " [--camera_device <camera device> (default: 0)]"
-                          << " [--tag_size <tag_size in m> (default: 0.053)]"
-                             " [--quad_decimate <quad_decimate> (default: 1)]"
-                             " [--nthreads <nb> (default: 1)]"
-                             " [--intrinsic <intrinsic file> (default: empty)]"
-                             " [--camera_name <camera name>  (default: empty)]"
-                             " [--pose_method <method> (0: HOMOGRAPHY, 1: HOMOGRAPHY_VIRTUAL_VS, "
-                             " 2: DEMENTHON_VIRTUAL_VS, 3: LAGRANGE_VIRTUAL_VS, "
-                             " 4: BEST_RESIDUAL_VIRTUAL_VS, 5: HOMOGRAPHY_ORTHOGONAL_ITERATION) (default: 0)]"
-                             " [--tag_family <family> (0: TAG_36h11, 1: TAG_36h10 (DEPRECATED), 2: TAG_36ARTOOLKIT (DEPRECATED),"
-                             " 3: TAG_25h9, 4: TAG_25h7 (DEPRECATED), 5: TAG_16h5, 6: TAG_CIRCLE21h7, 7: TAG_CIRCLE49h12,"
-                             " 8: TAG_CUSTOM48h12, 9: TAG_STANDARD41h12, 10: TAG_STANDARD52h13) (default: 0)]"
-                             " [--display_tag] [--z_aligned]";
+                     << " [--camera_device <camera device> (default: 0)]"
+                     << " [--tag_size <tag_size in m> (default: 0.053)]"
+                        " [--quad_decimate <quad_decimate> (default: 1)]"
+                        " [--nthreads <nb> (default: 1)]"
+                        " [--intrinsic <intrinsic file> (default: empty)]"
+                        " [--camera_name <camera name>  (default: empty)]"
+                        " [--pose_method <method> (0: HOMOGRAPHY, 1: HOMOGRAPHY_VIRTUAL_VS, "
+                        " 2: DEMENTHON_VIRTUAL_VS, 3: LAGRANGE_VIRTUAL_VS, "
+                        " 4: BEST_RESIDUAL_VIRTUAL_VS, 5: HOMOGRAPHY_ORTHOGONAL_ITERATION) (default: 0)]"
+                        " [--tag_family <family> (0: TAG_36h11, 1: TAG_36h10 (DEPRECATED), 2: TAG_36ARTOOLKIT (DEPRECATED),"
+                        " 3: TAG_25h9, 4: TAG_25h7 (DEPRECATED), 5: TAG_16h5, 6: TAG_CIRCLE21h7, 7: TAG_CIRCLE49h12,"
+                        " 8: TAG_CUSTOM48h12, 9: TAG_STANDARD41h12, 10: TAG_STANDARD52h13) (default: 0)]"
+                        " [--display_tag] [--z_aligned]";
                 cout << " [--display_off] [--color <color id>] [--thickness <line thickness>]";
                 cout << " [--help]" << endl;
                 return EXIT_SUCCESS;
@@ -215,7 +227,7 @@ private:
         vpDisplay *d = NULL;
         if (!display_off)
         {
-            d = new vpDisplayX(I_read);
+            d = new vpDisplayX(*atomic_load(&read_image_ptr));
         }
     }
 
@@ -233,14 +245,24 @@ private:
         try
         {
             image_timestamp = high_resolution_clock::now();
-            cv::Mat distorted_image = cv_bridge::toCvShare(msg, "mono8")->image;
-            if (I_write.getWidth() == 0 || I_write.getHeight() == 0)
+            // 创建新的 vpImage<unsigned char> 对象
+            auto new_image = make_shared<vpImage<unsigned char>>(msg->height, msg->width);
+
+            // 获取 ROS 图像的底层数据指针
+            const unsigned char *ros_image_data = reinterpret_cast<const unsigned char *>(&msg->data[0]);
+
+            // 将 ROS 图像数据直接复制到 vpImage 中
+            for (unsigned int i = 0; i < msg->height; ++i)
             {
-                I_write.resize(distorted_image.rows, distorted_image.cols);
+                for (unsigned int j = 0; j < msg->width; ++j)
+                {
+                    (*new_image)[i][j] = ros_image_data[i * msg->step + j];
+                }
             }
-            vpImageConvert::convert(distorted_image, I_write);
+
+            // 使用 atomic_store 进行线程安全的写缓冲区更新
+            atomic_store(&write_image_ptr, new_image);
             swapBuffers();
-            // cout << "image callback" << endl;
         }
         catch (cv_bridge::Exception &e)
         {
@@ -269,72 +291,60 @@ private:
         {
             if (processing.load(memory_order_acquire))
             {
-                chrono::time_point<high_resolution_clock> image_timestamp_temp = image_timestamp;
-                vector<vpHomogeneousMatrix> cMo_vec;
-                vpHomogeneousMatrix pose_matrix;
-                vpImageFilter::gaussianFilter(I_read, 3, 3);
-                cv::Mat imageMat;
-                vpImageConvert::convert(I_read, imageMat);
-
-                std_msgs::Header header;
-                header.stamp = ros::Time::now();
-                sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
-                cv_image_pub.publish(msg);
-
-                detector_.detect(I_read);
-                vector<int> ids = detector_.getTagsId();
-                if (ids.size() == 0)
+                auto image_ptr = atomic_load(&read_image_ptr);
+                if (image_ptr && image_ptr->getHeight() > 0 && image_ptr->getWidth() > 0)
                 {
-                    R_msg.data = {1, 0, 0, 0, -1, 0, 0, 0, -1};
-                    ros_pbvs_msg.data[3] = 0;
-                    ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
-                    cout << "lost!!!!!!" << endl;
-                }
-                else
-                {
-                    for (size_t i = 0; i < ids.size(); i++)
+                    // 对图像进行处理
+                    chrono::time_point<high_resolution_clock> image_timestamp_temp = image_timestamp;
+                    vector<vpHomogeneousMatrix> cMo_vec;
+                    vpHomogeneousMatrix pose_matrix;
+                    vpImageFilter::gaussianFilter(*image_ptr, 3, 3);
+                    cv::Mat imageMat;
+                    vpImageConvert::convert(*image_ptr, imageMat);
+
+                    std_msgs::Header header;
+                    header.stamp = ros::Time::now();
+                    sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
+                    cv_image_pub.publish(msg);
+
+                    detector_.detect(*image_ptr);
+                    vector<int> ids = detector_.getTagsId();
+                    if (ids.size() == 0)
                     {
-                        int id = ids[i];
-                        if (tagSizes.find(id) == tagSizes.end())
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            double tagSize = tagSizes[id];
-                            vpHomogeneousMatrix cMo;
-                            detector_.getPose(i, tagSize, cam, cMo);
-                            cMo_vec.push_back(cMo);
-                            break;
-                        }
-                    }
-                    pose_matrix = cMo_vec[0];
-                    vpRotationMatrix R;
-                    pose_matrix.extract(R);
-                    for (int i = 0; i < 3; i++)
-                    {
-                        for (int j = 0; j < 3; j++)
-                        {
-                            R_msg.data[i * 3 + j] = R[i][j];
-                        }
-                    }
-                    if (ids.size() == 2)
-                    {
-                        vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
-                        t = R * t;                            // Perform the matrix-vector multiplication
-                        ros_pbvs_msg.data[0] = pose_matrix[0][3] - t[0];
-                        ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
-                        ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
+                        R_msg.data = {1, 0, 0, 0, -1, 0, 0, 0, -1};
+                        ros_pbvs_msg.data[3] = 0;
+                        ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
+                        cout << "lost!!!!!!" << endl;
                     }
                     else
                     {
-                        if (ids[0] == 0)
+                        for (size_t i = 0; i < ids.size(); i++)
                         {
-                            ros_pbvs_msg.data[0] = pose_matrix[0][3];
-                            ros_pbvs_msg.data[1] = pose_matrix[1][3];
-                            ros_pbvs_msg.data[2] = pose_matrix[2][3];
+                            int id = ids[i];
+                            if (tagSizes.find(id) == tagSizes.end())
+                            {
+                                continue;
+                            }
+                            else
+                            {
+                                double tagSize = tagSizes[id];
+                                vpHomogeneousMatrix cMo;
+                                detector_.getPose(i, tagSize, cam, cMo);
+                                cMo_vec.push_back(cMo);
+                                break;
+                            }
                         }
-                        else
+                        pose_matrix = cMo_vec[0];
+                        vpRotationMatrix R;
+                        pose_matrix.extract(R);
+                        for (int i = 0; i < 3; i++)
+                        {
+                            for (int j = 0; j < 3; j++)
+                            {
+                                R_msg.data[i * 3 + j] = R[i][j];
+                            }
+                        }
+                        if (ids.size() == 2)
                         {
                             vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
                             t = R * t;                            // Perform the matrix-vector multiplication
@@ -342,20 +352,37 @@ private:
                             ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
                             ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
                         }
+                        else
+                        {
+                            if (ids[0] == 0)
+                            {
+                                ros_pbvs_msg.data[0] = pose_matrix[0][3];
+                                ros_pbvs_msg.data[1] = pose_matrix[1][3];
+                                ros_pbvs_msg.data[2] = pose_matrix[2][3];
+                            }
+                            else
+                            {
+                                vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
+                                t = R * t;                            // Perform the matrix-vector multiplication
+                                ros_pbvs_msg.data[0] = pose_matrix[0][3] - t[0];
+                                ros_pbvs_msg.data[1] = pose_matrix[1][3] - t[1];
+                                ros_pbvs_msg.data[2] = pose_matrix[2][3] - t[2];
+                            }
+                        }
+                        // cout << R << endl; // Rca 相机到apriltag
+                        ros_pbvs_msg.data[3] = 1;
+                        ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
                     }
-                    // cout << R << endl; // Rca 相机到apriltag
-                    ros_pbvs_msg.data[3] = 1;
-                    ros_pbvs_msg.data[4] = image_timestamp_temp.time_since_epoch().count();
+                    auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                    if (delay.count() > 0)
+                    {
+                        this_thread::sleep_for(delay);
+                    }
+                    auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                    cout << delay2.count() << endl;
+                    pbvs_publisher.publish(ros_pbvs_msg);
+                    R_publisher.publish(R_msg);
                 }
-                auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                if (delay.count() > 0)
-                {
-                    this_thread::sleep_for(delay);
-                }
-                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                cout << delay2.count() << endl;
-                pbvs_publisher.publish(ros_pbvs_msg);
-                R_publisher.publish(R_msg);
                 processing.store(false, memory_order_release);
             }
             // 让线程稍作休息，避免空转

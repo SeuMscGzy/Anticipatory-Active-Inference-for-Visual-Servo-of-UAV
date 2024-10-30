@@ -33,6 +33,8 @@ using namespace std::chrono;
 vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
 vpDetectorAprilTag detector_(tagFamily);
 
+std::mutex image_mutex; // 全局或成员变量互斥锁
+
 int count_for_overtime = 0;
 
 double fromQuaternion2yaw(Eigen::Quaterniond q)
@@ -52,7 +54,7 @@ public:
         opt_device = 0;
         poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY;
         quad_decimate = 1.0;
-        nThreads = 8;
+        nThreads = 4;
         display_tag = false;
         color_id = -1;
         thickness = 2;
@@ -73,7 +75,7 @@ public:
         cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
-        timer = nh_.createTimer(ros::Duration(0.06), &ObjectDetector::timerCallback, this);
+        timer = nh_.createTimer(ros::Duration(0.08), &ObjectDetector::timerCallback, this);
         worker_thread = thread(&ObjectDetector::processImages, this);
     }
 
@@ -174,6 +176,7 @@ public:
     {
         try
         {
+            std::lock_guard<std::mutex> lock(image_mutex);
             image_timestamp = high_resolution_clock::now();
             cv::Mat distorted_image = cv_bridge::toCvShare(msg, "mono8")->image;
             if (I.getWidth() == 0 || I.getHeight() == 0)
@@ -219,9 +222,15 @@ public:
         {
             if (processing)
             {
-                vpImage<unsigned char> I_temp = I;
-                chrono::time_point<high_resolution_clock> image_timestamp_temp = high_resolution_clock::now();
+                vpImage<unsigned char> I_temp;
+                chrono::time_point<high_resolution_clock> image_timestamp_temp;
+                {
+                    std::lock_guard<std::mutex> lock(image_mutex);
+                    I_temp = I;
+                    image_timestamp_temp = image_timestamp;
+                }
                 Eigen::Matrix3d R_w2c_temp = R_w2c;
+                chrono::time_point<high_resolution_clock> image_timestamp_temp2 = high_resolution_clock::now();
                 if (I_temp.getWidth() > 0 && I_temp.getHeight() > 0)
                 {
                     // 对图像进行处理
@@ -290,7 +299,9 @@ public:
                         desired_yaw = yaw;
                     }
                 }
-                auto delay = microseconds(50000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                chrono::time_point<high_resolution_clock> image_timestamp_temp3 = high_resolution_clock::now();
+                cout << "image processing time: " << duration_cast<microseconds>(image_timestamp_temp3 - image_timestamp_temp2).count() << endl;
+                auto delay = microseconds(75000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 if (delay.count() > 0)
                 {
                     this_thread::sleep_for(delay);
@@ -301,8 +312,8 @@ public:
                 }
                 publishDetectionResult(image_timestamp_temp);
                 processing = false;
-                //auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                //cout << delay2.count() << endl;
+                // auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                // cout << delay2.count() << endl;
                 cout << count_for_overtime << endl;
             }
             // 让线程稍作休息，避免空转

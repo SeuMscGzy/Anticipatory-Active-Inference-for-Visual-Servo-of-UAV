@@ -54,7 +54,7 @@ public:
         opt_device = 0;
         poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY;
         quad_decimate = 1.0;
-        nThreads = 4;
+        nThreads = 2;
         display_tag = false;
         color_id = -1;
         thickness = 2;
@@ -255,6 +255,16 @@ public:
                     }
                     else
                     {
+                        for (const auto &id : ids)
+                        {
+                            if (id != 0 && id != 1)
+                            {
+                                desired_yaw = 0;
+                                lost_target = true;
+                                processing = false;
+                                return;
+                            }
+                        }
                         lost_target = false;
                         for (size_t i = 0; i < ids.size(); i++)
                         {
@@ -300,7 +310,7 @@ public:
                     }
                 }
                 chrono::time_point<high_resolution_clock> image_timestamp_temp3 = high_resolution_clock::now();
-                cout << "image processing time: " << duration_cast<microseconds>(image_timestamp_temp3 - image_timestamp_temp2).count() << endl;
+                // cout << "image processing time: " << duration_cast<microseconds>(image_timestamp_temp3 - image_timestamp_temp2).count() << endl;
                 auto delay = microseconds(75000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 if (delay.count() > 0)
                 {
@@ -314,7 +324,7 @@ public:
                 processing = false;
                 // auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 // cout << delay2.count() << endl;
-                cout << count_for_overtime << endl;
+                // cout << count_for_overtime << endl;
             }
             // 让线程稍作休息，避免空转
             this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒

@@ -76,7 +76,7 @@ public:
         cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
-        timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
+        timer = nh_.createTimer(ros::Duration(0.1), &ObjectDetector::timerCallback, this);
         worker_thread = thread(&ObjectDetector::processImages, this);
     }
 
@@ -342,8 +342,6 @@ private:
                                 vpHomogeneousMatrix cMo;
                                 detector_.getPose(i, tagSize, cam, cMo);
                                 cMo_vec.push_back(cMo);
-                                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                                cout << delay2.count() << endl;
                                 break;
                             }
                         }
@@ -374,13 +372,15 @@ private:
                         desired_yaw = yaw;
                     }
                 }
-                auto delay = microseconds(48000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                auto delay = microseconds(85000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 if (delay.count() > 0)
                 {
                     this_thread::sleep_for(delay);
                 }
                 publishDetectionResult(image_timestamp_temp);
                 processing = false;
+                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                cout << delay2.count() << endl;
             }
             // 让线程稍作休息，避免空转
             this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒

@@ -11,10 +11,10 @@ public:
     {
         // 初始化节点，订阅图像话题
         image_transport::ImageTransport it(nh);
-        sub = it.subscribe("/usb_cam/image_raw", 1, &ImageToVideo::imageCallback, this);
+        sub = it.subscribe("/camera/image", 1, &ImageToVideo::imageCallback, this);
 
         // 初始化视频编写器
-        video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 54, cv::Size(800, 600));
+        video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 12, cv::Size(640, 480));
     }
     void imageCallback(const sensor_msgs::ImageConstPtr &msg)
     {

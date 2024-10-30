@@ -33,6 +33,8 @@ using namespace std::chrono;
 vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
 vpDetectorAprilTag detector_(tagFamily);
 
+int count_for_overtime = 0;
+
 double fromQuaternion2yaw(Eigen::Quaterniond q)
 {
     double yaw = atan2(2 * (q.x() * q.y() + q.w() * q.z()),
@@ -49,9 +51,8 @@ public:
         // 参数初始化
         opt_device = 0;
         poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY;
-        tagSize = 0.053;
         quad_decimate = 1.0;
-        nThreads = 2;
+        nThreads = 8;
         display_tag = false;
         color_id = -1;
         thickness = 2;
@@ -67,16 +68,12 @@ public:
         R_w2a = Eigen::Matrix3d::Identity();
         R_w2c = Eigen::Matrix3d::Identity();
 
-        // parseCommandLineArgs();
-        initializeCameraParameters();
-        setupDetector();
-
         // ROS topic和服务
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
         cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
-        timer = nh_.createTimer(ros::Duration(0.1), &ObjectDetector::timerCallback, this);
+        timer = nh_.createTimer(ros::Duration(0.06), &ObjectDetector::timerCallback, this);
         worker_thread = thread(&ObjectDetector::processImages, this);
     }
 
@@ -91,12 +88,39 @@ public:
 
     void start()
     {
-        ros::AsyncSpinner spinner(2); // 使用4个线程
+        ros::AsyncSpinner spinner(3); // 使用3个线程
         spinner.start();
         ros::waitForShutdown();
     }
 
-private:
+    void setupDetector()
+    {
+        detector_.setAprilTagQuadDecimate(quad_decimate);
+        detector_.setAprilTagPoseEstimationMethod(poseEstimationMethod);
+        detector_.setAprilTagNbThreads(nThreads);
+        detector_.setDisplayTag(display_tag, color_id < 0 ? vpColor::none : vpColor::getColor(color_id), thickness);
+        detector_.setZAlignedWithCameraAxis(align_frame);
+    }
+
+    void initializeCameraParameters()
+    {
+        cam.initPersProjWithoutDistortion(537.9791181092193, 535.4888099676702, 427.0323350525588, 315.15525740107233);
+        if (!intrinsic_file.empty() && !camera_name.empty())
+        {
+            parser.parse(cam, intrinsic_file, camera_name, vpCameraParameters::perspectiveProjWithoutDistortion);
+        }
+        cout << cam << endl;
+        cout << "poseEstimationMethod: " << poseEstimationMethod << endl;
+        cout << "tagFamily: " << tagFamily << endl;
+        cout << "nThreads : " << nThreads << endl;
+        cout << "Z aligned: " << align_frame << endl;
+        vpDisplay *d = NULL;
+        if (!display_off)
+        {
+            d = new vpDisplayX(I);
+        }
+    }
+
     ros::NodeHandle nh_;
     ros::Publisher point_pub_;
     ros::Publisher cv_image_pub;
@@ -137,113 +161,6 @@ private:
     Eigen::Matrix3d R_w2c; // Rwc 世界到相机
     Eigen::Matrix3d R_w2a; // Rwa 世界到apriltag
     std_msgs::Float64MultiArray point_;
-
-    /*int parseCommandLineArgs()
-    {
-        for (int i = 1; i < argc_; i++)
-        {
-            if (string(argv_[i]) == "--pose_method" && i + 1 < argc_)
-            {
-                poseEstimationMethod = (vpDetectorAprilTag::vpPoseEstimationMethod)atoi(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--tag_size" && i + 1 < argc_)
-            {
-                tagSize = atof(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--camera_device" && i + 1 < argc_)
-            {
-                opt_device = atoi(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--quad_decimate" && i + 1 < argc_)
-            {
-                quad_decimate = (float)atof(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--nthreads" && i + 1 < argc_)
-            {
-                nThreads = atoi(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--intrinsic" && i + 1 < argc_)
-            {
-                intrinsic_file = string(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--camera_name" && i + 1 < argc_)
-            {
-                camera_name = string(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--display_tag")
-            {
-                display_tag = true;
-            }
-            else if (string(argv_[i]) == "--display_off")
-            {
-                display_off = true;
-            }
-            else if (string(argv_[i]) == "--color" && i + 1 < argc_)
-            {
-                color_id = atoi(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--thickness" && i + 1 < argc_)
-            {
-                thickness = (unsigned int)atoi(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--tag_family" && i + 1 < argc_)
-            {
-                tagFamily = (vpDetectorAprilTag::vpAprilTagFamily)atoi(argv_[i + 1]);
-            }
-            else if (string(argv_[i]) == "--z_aligned")
-            {
-                align_frame = true;
-            }
-            else if (string(argv_[i]) == "--help" || string(argv_[i]) == "-h")
-            {
-                cout << "Usage: " << argv_[0]
-                     << " [--camera_device <camera device> (default: 0)]"
-                     << " [--tag_size <tag_size in m> (default: 0.053)]"
-                        " [--quad_decimate <quad_decimate> (default: 1)]"
-                        " [--nthreads <nb> (default: 1)]"
-                        " [--intrinsic <intrinsic file> (default: empty)]"
-                        " [--camera_name <camera name>  (default: empty)]"
-                        " [--pose_method <method> (0: HOMOGRAPHY, 1: HOMOGRAPHY_VIRTUAL_VS, "
-                        " 2: DEMENTHON_VIRTUAL_VS, 3: LAGRANGE_VIRTUAL_VS, "
-                        " 4: BEST_RESIDUAL_VIRTUAL_VS, 5: HOMOGRAPHY_ORTHOGONAL_ITERATION) (default: 0)]"
-                        " [--tag_family <family> (0: TAG_36h11, 1: TAG_36h10 (DEPRECATED), 2: TAG_36ARTOOLKIT (DEPRECATED),"
-                        " 3: TAG_25h9, 4: TAG_25h7 (DEPRECATED), 5: TAG_16h5, 6: TAG_CIRCLE21h7, 7: TAG_CIRCLE49h12,"
-                        " 8: TAG_CUSTOM48h12, 9: TAG_STANDARD41h12, 10: TAG_STANDARD52h13) (default: 0)]"
-                        " [--display_tag] [--z_aligned]";
-                cout << " [--display_off] [--color <color id>] [--thickness <line thickness>]";
-                cout << " [--help]" << endl;
-                return EXIT_SUCCESS;
-            }
-        }
-    }*/
-
-    void initializeCameraParameters()
-    {
-        cam.initPersProjWithoutDistortion(537.9791181092193, 535.4888099676702, 427.0323350525588, 315.15525740107233);
-        if (!intrinsic_file.empty() && !camera_name.empty())
-        {
-            parser.parse(cam, intrinsic_file, camera_name, vpCameraParameters::perspectiveProjWithoutDistortion);
-        }
-        cout << cam << endl;
-        cout << "poseEstimationMethod: " << poseEstimationMethod << endl;
-        cout << "tagFamily: " << tagFamily << endl;
-        cout << "nThreads : " << nThreads << endl;
-        cout << "Z aligned: " << align_frame << endl;
-        vpDisplay *d = NULL;
-        if (!display_off)
-        {
-            d = new vpDisplayX(I);
-        }
-    }
-
-    void setupDetector()
-    {
-        detector_.setAprilTagQuadDecimate(quad_decimate);
-        detector_.setAprilTagPoseEstimationMethod(poseEstimationMethod);
-        detector_.setAprilTagNbThreads(nThreads);
-        detector_.setDisplayTag(display_tag, color_id < 0 ? vpColor::none : vpColor::getColor(color_id), thickness);
-        detector_.setZAlignedWithCameraAxis(align_frame);
-    }
 
     void publishDetectionResult(chrono::time_point<high_resolution_clock> &image_timestamp_)
     {
@@ -302,23 +219,24 @@ private:
         {
             if (processing)
             {
+                vpImage<unsigned char> I_temp = I;
                 chrono::time_point<high_resolution_clock> image_timestamp_temp = high_resolution_clock::now();
                 Eigen::Matrix3d R_w2c_temp = R_w2c;
-                if (I.getWidth() > 0 && I.getHeight() > 0)
+                if (I_temp.getWidth() > 0 && I_temp.getHeight() > 0)
                 {
                     // 对图像进行处理
                     vector<vpHomogeneousMatrix> cMo_vec;
                     vpHomogeneousMatrix pose_matrix;
-                    vpImageFilter::gaussianFilter(I, 3, 3);
+                    vpImageFilter::gaussianFilter(I_temp, 2, 2);
                     cv::Mat imageMat;
-                    vpImageConvert::convert(I, imageMat);
+                    vpImageConvert::convert(I_temp, imageMat);
 
                     std_msgs::Header header;
                     header.stamp = ros::Time::now();
                     sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
                     cv_image_pub.publish(msg);
 
-                    detector_.detect(I);
+                    detector_.detect(I_temp);
                     vector<int> ids = detector_.getTagsId();
                     if (ids.size() == 0)
                     {
@@ -372,15 +290,20 @@ private:
                         desired_yaw = yaw;
                     }
                 }
-                auto delay = microseconds(85000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                auto delay = microseconds(50000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 if (delay.count() > 0)
                 {
                     this_thread::sleep_for(delay);
                 }
+                else
+                {
+                    count_for_overtime += 1;
+                }
                 publishDetectionResult(image_timestamp_temp);
                 processing = false;
-                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                cout << delay2.count() << endl;
+                //auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                //cout << delay2.count() << endl;
+                cout << count_for_overtime << endl;
             }
             // 让线程稍作休息，避免空转
             this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒
@@ -393,6 +316,83 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "object_detector");
     ros::NodeHandle nh;
     ObjectDetector detector(nh);
+    for (int i = 1; i < argc; i++)
+    {
+        if (std::string(argv[i]) == "--pose_method" && i + 1 < argc)
+        {
+            detector.poseEstimationMethod = (vpDetectorAprilTag::vpPoseEstimationMethod)atoi(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--tag_size" && i + 1 < argc)
+        {
+            detector.tagSize = atof(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--camera_device" && i + 1 < argc)
+        {
+            detector.opt_device = atoi(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--quad_decimate" && i + 1 < argc)
+        {
+            detector.quad_decimate = (float)atof(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--nthreads" && i + 1 < argc)
+        {
+            detector.nThreads = atoi(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--intrinsic" && i + 1 < argc)
+        {
+            detector.intrinsic_file = std::string(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--camera_name" && i + 1 < argc)
+        {
+            detector.camera_name = std::string(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--display_tag")
+        {
+            detector.display_tag = true;
+        }
+        else if (std::string(argv[i]) == "--display_off")
+        {
+            detector.display_off = true;
+        }
+        else if (std::string(argv[i]) == "--color" && i + 1 < argc)
+        {
+            detector.color_id = atoi(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--thickness" && i + 1 < argc)
+        {
+            detector.thickness = (unsigned int)atoi(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--tag_family" && i + 1 < argc)
+        {
+            tagFamily = (vpDetectorAprilTag::vpAprilTagFamily)atoi(argv[i + 1]);
+        }
+        else if (std::string(argv[i]) == "--z_aligned")
+        {
+            detector.align_frame = true;
+        }
+        else if (std::string(argv[i]) == "--help" || std::string(argv[i]) == "-h")
+        {
+            std::cout << "Usage: " << argv[0]
+                      << " [--camera_device <camera device> (default: 0)]"
+                      << " [--tag_size <tag_size in m> (default: 0.053)]"
+                         " [--quad_decimate <quad_decimate> (default: 1)]"
+                         " [--nthreads <nb> (default: 1)]"
+                         " [--intrinsic <intrinsic file> (default: empty)]"
+                         " [--camera_name <camera name>  (default: empty)]"
+                         " [--pose_method <method> (0: HOMOGRAPHY, 1: HOMOGRAPHY_VIRTUAL_VS, "
+                         " 2: DEMENTHON_VIRTUAL_VS, 3: LAGRANGE_VIRTUAL_VS, "
+                         " 4: BEST_RESIDUAL_VIRTUAL_VS, 5: HOMOGRAPHY_ORTHOGONAL_ITERATION) (default: 0)]"
+                         " [--tag_family <family> (0: TAG_36h11, 1: TAG_36h10 (DEPRECATED), 2: TAG_36ARTOOLKIT (DEPRECATED),"
+                         " 3: TAG_25h9, 4: TAG_25h7 (DEPRECATED), 5: TAG_16h5, 6: TAG_CIRCLE21h7, 7: TAG_CIRCLE49h12,"
+                         " 8: TAG_CUSTOM48h12, 9: TAG_STANDARD41h12, 10: TAG_STANDARD52h13) (default: 0)]"
+                         " [--display_tag] [--z_aligned]";
+            std::cout << " [--display_off] [--color <color id>] [--thickness <line thickness>]";
+            std::cout << " [--help]" << std::endl;
+            return EXIT_SUCCESS;
+        }
+    }
+    detector.initializeCameraParameters();
+    detector.setupDetector();
     detector.start();
     return 0;
 }

@@ -48,7 +48,7 @@ public:
     {
         // 参数初始化
         opt_device = 0;
-        poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY_VIRTUAL_VS;
+        poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY;
         tagSize = 0.053;
         quad_decimate = 1.0;
         nThreads = 2;
@@ -65,16 +65,11 @@ public:
             -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
             -0.04586719128150388, 0.018945419570245543, -0.998767876856907;
         R_w2a = Eigen::Matrix3d::Identity();
-        R_w2c_ptr = make_shared<Eigen::Matrix3d>(Eigen::Matrix3d::Identity());
+        R_w2c = Eigen::Matrix3d::Identity();
 
         // parseCommandLineArgs();
         initializeCameraParameters();
         setupDetector();
-
-        // 初始化图像缓冲区
-        auto initial_image = make_shared<vpImage<unsigned char>>(600, 800);
-        atomic_store(&write_image_ptr, initial_image);
-        atomic_store(&read_image_ptr, initial_image);
 
         // ROS topic和服务
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
@@ -96,7 +91,7 @@ public:
 
     void start()
     {
-        ros::AsyncSpinner spinner(2); // 使用两个线程
+        ros::AsyncSpinner spinner(2); // 使用4个线程
         spinner.start();
         ros::waitForShutdown();
     }
@@ -111,16 +106,10 @@ private:
 
     time_point<high_resolution_clock> image_timestamp;
 
-    // 图像缓冲区指针
-    shared_ptr<vpImage<unsigned char>> write_image_ptr;
-    shared_ptr<vpImage<unsigned char>> read_image_ptr;
-
-    atomic_flag buffer_lock = ATOMIC_FLAG_INIT;
-
     thread worker_thread;
 
-    atomic<bool> stop_thread;
-    atomic<bool> processing;
+    bool stop_thread;
+    bool processing;
 
     int opt_device;
     vpDetectorAprilTag::vpPoseEstimationMethod poseEstimationMethod;
@@ -137,38 +126,17 @@ private:
     vpCameraParameters cam;
     vpXmlParserCamera parser;
 
+    vpImage<unsigned char> I; // 使用实际的高度和宽度初始化
+
     bool lost_target = true;
     map<int, double> tagSizes = {{0, 0.0254}, {1, 0.081}};
     double desired_yaw;
     Eigen::Vector3d Position_after;
-    Eigen::Matrix3d R_c2a;                 // Rca 相机到apriltag
-    Eigen::Matrix3d R_i2c;                 // Ric imu到相机
-    shared_ptr<Eigen::Matrix3d> R_w2c_ptr; // Rwc 世界到相机
-    Eigen::Matrix3d R_w2a;                 // Rwa 世界到apriltag
+    Eigen::Matrix3d R_c2a; // Rca 相机到apriltag
+    Eigen::Matrix3d R_i2c; // Ric imu到相机
+    Eigen::Matrix3d R_w2c; // Rwc 世界到相机
+    Eigen::Matrix3d R_w2a; // Rwa 世界到apriltag
     std_msgs::Float64MultiArray point_;
-
-    void swapBuffers()
-    {
-        // 使用 std::atomic_store 进行线程安全的交换
-        auto current_write_ptr = atomic_load(&write_image_ptr);
-        atomic_store(&read_image_ptr, current_write_ptr);
-    }
-
-    // 获取矩阵副本（线程安全）
-    Eigen::Matrix3d getMatrix()
-    {
-        auto current_ptr = atomic_load(&R_w2c_ptr);
-        return *current_ptr; // Return a copy of the current matrix
-    }
-
-    // 更新矩阵（线程安全）
-    void updateMatrix(const Eigen::Matrix3d &new_matrix)
-    {
-        // Create a new shared_ptr with the updated matrix
-        auto new_ptr = make_shared<Eigen::Matrix3d>(new_matrix);
-        // Atomically store the new pointer
-        atomic_store(&R_w2c_ptr, new_ptr);
-    }
 
     /*int parseCommandLineArgs()
     {
@@ -264,7 +232,7 @@ private:
         vpDisplay *d = NULL;
         if (!display_off)
         {
-            d = new vpDisplayX(*atomic_load(&read_image_ptr));
+            d = new vpDisplayX(I);
         }
     }
 
@@ -290,24 +258,12 @@ private:
         try
         {
             image_timestamp = high_resolution_clock::now();
-            // 创建新的 vpImage<unsigned char> 对象
-            auto new_image = make_shared<vpImage<unsigned char>>(msg->height, msg->width);
-
-            // 获取 ROS 图像的底层数据指针
-            const unsigned char *ros_image_data = reinterpret_cast<const unsigned char *>(&msg->data[0]);
-
-            // 将 ROS 图像数据直接复制到 vpImage 中
-            for (unsigned int i = 0; i < msg->height; ++i)
+            cv::Mat distorted_image = cv_bridge::toCvShare(msg, "mono8")->image;
+            if (I.getWidth() == 0 || I.getHeight() == 0)
             {
-                for (unsigned int j = 0; j < msg->width; ++j)
-                {
-                    (*new_image)[i][j] = ros_image_data[i * msg->step + j];
-                }
+                I.resize(distorted_image.rows, distorted_image.cols); // 根据实际接收到的图像尺寸调整大小
             }
-
-            // 使用 atomic_store 进行线程安全的写缓冲区更新
-            atomic_store(&write_image_ptr, new_image);
-            swapBuffers();
+            vpImageConvert::convert(distorted_image, I);
         }
         catch (cv_bridge::Exception &e)
         {
@@ -319,13 +275,13 @@ private:
     void timerCallback(const ros::TimerEvent &)
     {
         // 如果当前线程还在处理，则不执行新任务
-        if (processing.load(memory_order_acquire))
+        if (processing)
         {
             return;
         }
         else
         {
-            processing.store(true, memory_order_release); // 标志设置为正在处理
+            processing = true; // 标志设置为正在处理
         }
         // cout << processing << endl;
     }
@@ -337,33 +293,32 @@ private:
             msg->pose.pose.orientation.x,
             msg->pose.pose.orientation.y,
             msg->pose.pose.orientation.z);
-        updateMatrix(q1.toRotationMatrix() * R_i2c); // 世界系到相机系
+        R_w2c = q1.toRotationMatrix() * R_i2c; // 世界系到相机系
     }
 
     void processImages()
     {
-        while (!stop_thread.load(memory_order_acquire))
+        while (!stop_thread)
         {
-            if (processing.load(memory_order_acquire))
+            if (processing)
             {
-                auto image_ptr = atomic_load(&read_image_ptr);
-                chrono::time_point<high_resolution_clock> image_timestamp_temp = image_timestamp;
-                Eigen::Matrix3d R_w2c_temp = getMatrix();
-                if (image_ptr && image_ptr->getHeight() > 0 && image_ptr->getWidth() > 0)
+                chrono::time_point<high_resolution_clock> image_timestamp_temp = high_resolution_clock::now();
+                Eigen::Matrix3d R_w2c_temp = R_w2c;
+                if (I.getWidth() > 0 && I.getHeight() > 0)
                 {
                     // 对图像进行处理
                     vector<vpHomogeneousMatrix> cMo_vec;
                     vpHomogeneousMatrix pose_matrix;
-                    vpImageFilter::gaussianFilter(*image_ptr, 3, 3);
+                    vpImageFilter::gaussianFilter(I, 3, 3);
                     cv::Mat imageMat;
-                    vpImageConvert::convert(*image_ptr, imageMat);
+                    vpImageConvert::convert(I, imageMat);
 
                     std_msgs::Header header;
                     header.stamp = ros::Time::now();
                     sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
                     cv_image_pub.publish(msg);
 
-                    detector_.detect(*image_ptr);
+                    detector_.detect(I);
                     vector<int> ids = detector_.getTagsId();
                     if (ids.size() == 0)
                     {
@@ -387,6 +342,8 @@ private:
                                 vpHomogeneousMatrix cMo;
                                 detector_.getPose(i, tagSize, cam, cMo);
                                 cMo_vec.push_back(cMo);
+                                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                                cout << delay2.count() << endl;
                                 break;
                             }
                         }
@@ -417,15 +374,13 @@ private:
                         desired_yaw = yaw;
                     }
                 }
-                auto delay = microseconds(40000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
+                auto delay = microseconds(48000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
                 if (delay.count() > 0)
                 {
                     this_thread::sleep_for(delay);
                 }
-                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_temp);
-                cout << delay2.count() << endl;
                 publishDetectionResult(image_timestamp_temp);
-                processing.store(false, memory_order_release);
+                processing = false;
             }
             // 让线程稍作休息，避免空转
             this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒

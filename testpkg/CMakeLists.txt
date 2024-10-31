@@ -17,7 +17,11 @@ find_package(catkin REQUIRED COMPONENTS
 )
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED) 
-include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(include ${OpenCV_INCLUDE_DIRS})
+
+catkin_package(
+  CATKIN_DEPENDS roscpp cap_pic_from_cam_srv
+)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(VISP REQUIRED)  # This line finds ViSP and defines VISP_INCLUDE_DIRS and VISP_LIBRARIES

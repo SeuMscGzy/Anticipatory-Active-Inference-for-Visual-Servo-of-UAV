@@ -1,4 +1,5 @@
-#include "CameraCapture.h"
+#include "cap_pic_from_cam_srv/CameraCapture.h"
+
 
 CameraCapture::CameraCapture(const std::string &device_address)
     : device_address_(device_address), is_initialized_(false)
@@ -45,6 +46,7 @@ bool CameraCapture::init()
     // 设置相机参数（可选）
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+    //cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
 
     is_initialized_ = true;
     return true;

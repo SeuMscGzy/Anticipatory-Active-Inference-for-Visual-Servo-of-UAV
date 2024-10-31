@@ -1,5 +1,5 @@
 #include <ros/ros.h>
-#include "CameraCapture.h"
+#include <cap_pic_from_cam_srv/CameraCapture.h>
 #include <cap_pic_from_cam_srv/CaptureImage.h> // 自定义服务类型
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/Image.h>

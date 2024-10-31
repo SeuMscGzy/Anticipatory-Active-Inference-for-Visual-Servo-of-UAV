@@ -25,9 +25,12 @@
 #include <Eigen/Geometry>
 #include <nav_msgs/Odometry.h>
 #include <cap_pic_from_cam_srv/CaptureImage.h>
+#include <cap_pic_from_cam_srv/CameraCapture.h>
 
 using namespace std;
 using namespace std::chrono;
+
+vpImage<unsigned char> I(480, 640); // 使用实际的高度和宽度初始化
 
 vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
 vpDetectorAprilTag detector_(tagFamily);
@@ -47,7 +50,7 @@ class ObjectDetector
 {
 public:
     ObjectDetector(ros::NodeHandle &nh)
-        : nh_(nh), stop_thread(false), processing(false), desired_yaw(0)
+        : nh_(nh), stop_thread(false), processing(false), desired_yaw(0), camera_cap("/dev/video0")
     {
         // 参数初始化
         opt_device = 0;
@@ -74,9 +77,14 @@ public:
         cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
         imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
-        client = nh.serviceClient<cap_pic_from_cam_srv::CaptureImage>("/capture_image");
         timer = nh_.createTimer(ros::Duration(0.08), &ObjectDetector::timerCallback, this);
         worker_thread = thread(&ObjectDetector::processImages, this);
+
+        // 初始化相机
+        if (!camera_cap.init())
+        {
+            ROS_ERROR("Failed to initialize camera");
+        }
     }
 
     ~ObjectDetector()
@@ -129,7 +137,8 @@ public:
     ros::Subscriber imgsub;
     ros::Subscriber odom_sub_;
     ros::Timer timer;
-    ros::ServiceClient client;
+
+    CameraCapture camera_cap;
 
     time_point<high_resolution_clock> image_timestamp;
 
@@ -154,8 +163,6 @@ public:
     bool display_off;
     vpCameraParameters cam;
     vpXmlParserCamera parser;
-
-    vpImage<unsigned char> I; // 使用实际的高度和宽度初始化
 
     bool lost_target = true;
     map<int, double> tagSizes = {{0, 0.0254}, {1, 0.081}};
@@ -225,121 +232,100 @@ public:
         {
             if (processing)
             {
+                Eigen::Matrix3d R_w2c_temp = R_w2c;
                 chrono::time_point<high_resolution_clock> image_timestamp_getimg = high_resolution_clock::now();
-                if (client.call(srv))
+                try
                 {
-                    if (srv.response.success)
-                    {
-                        try
-                        {
-                            cv::Mat distorted_image = cv_bridge::toCvCopy(srv.response.image, "mono8")->image;
-                            if (I.getWidth() == 0 || I.getHeight() == 0)
-                            {
-                                I.resize(distorted_image.rows, distorted_image.cols); // 根据实际接收到的图像尺寸调整大小
-                            }
-                            vpImageConvert::convert(distorted_image, I);
-                            chrono::time_point<high_resolution_clock> image_timestamp_getimg_over = high_resolution_clock::now();
-                            cout << "image get time: " << duration_cast<microseconds>(image_timestamp_getimg_over - image_timestamp_getimg).count() << endl;
-                        }
-                        catch (cv_bridge::Exception &e)
-                        {
-                            processing = false;
-                            ROS_ERROR("cv_bridge exception: %s", e.what());
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        ROS_WARN("Service call failed: %s", srv.response.message.c_str());
-                        processing = false;
-                        return;
-                    }
+                    cv::Mat distorted_image;
+                    distorted_image = camera_cap.captureImage(distorted_image);
+                    cv::cvtColor(distorted_image, distorted_image, cv::COLOR_BGR2GRAY);
+                    vpImageConvert::convert(distorted_image, I);
+                    chrono::time_point<high_resolution_clock> image_timestamp_getimg_over = high_resolution_clock::now();
+                    cout << "image get time: " << duration_cast<microseconds>(image_timestamp_getimg_over - image_timestamp_getimg).count() << endl;
+                }
+                catch (cv_bridge::Exception &e)
+                {
+                    processing = false;
+                    ROS_ERROR("cv_bridge exception: %s", e.what());
+                    return;
+                }
+
+                // 对图像进行处理
+                vector<vpHomogeneousMatrix> cMo_vec;
+                vpHomogeneousMatrix pose_matrix;
+                vpImageFilter::gaussianFilter(I, 2, 2);
+                cv::Mat imageMat;
+                vpImageConvert::convert(I, imageMat);
+
+                std_msgs::Header header;
+                header.stamp = ros::Time::now();
+                sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
+                cv_image_pub.publish(msg);
+
+                detector_.detect(I);
+                vector<int> ids = detector_.getTagsId();
+                if (ids.size() == 0)
+                {
+                    desired_yaw = 0;
+                    lost_target = true;
+                    cout << "lost!!!!!!" << endl;
                 }
                 else
                 {
-                    processing = false;
-                    ROS_ERROR("Failed to call service capture_image");
-                    return;
-                }
-                Eigen::Matrix3d R_w2c_temp = R_w2c;
-                if (I.getWidth() > 0 && I.getHeight() > 0)
-                {
-                    // 对图像进行处理
-                    vector<vpHomogeneousMatrix> cMo_vec;
-                    vpHomogeneousMatrix pose_matrix;
-                    vpImageFilter::gaussianFilter(I, 2, 2);
-                    cv::Mat imageMat;
-                    vpImageConvert::convert(I, imageMat);
-
-                    std_msgs::Header header;
-                    header.stamp = ros::Time::now();
-                    sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
-                    cv_image_pub.publish(msg);
-
-                    detector_.detect(I);
-                    vector<int> ids = detector_.getTagsId();
-                    if (ids.size() == 0)
+                    for (const auto &id : ids)
                     {
-                        desired_yaw = 0;
-                        lost_target = true;
-                        cout << "lost!!!!!!" << endl;
+                        if (id != 0 && id != 1)
+                        {
+                            desired_yaw = 0;
+                            lost_target = true;
+                            processing = false;
+                            return;
+                        }
                     }
-                    else
+                    lost_target = false;
+                    for (size_t i = 0; i < ids.size(); i++)
                     {
-                        for (const auto &id : ids)
+                        int id = ids[i];
+                        if (tagSizes.find(id) == tagSizes.end())
                         {
-                            if (id != 0 && id != 1)
-                            {
-                                desired_yaw = 0;
-                                lost_target = true;
-                                processing = false;
-                                return;
-                            }
-                        }
-                        lost_target = false;
-                        for (size_t i = 0; i < ids.size(); i++)
-                        {
-                            int id = ids[i];
-                            if (tagSizes.find(id) == tagSizes.end())
-                            {
-                                continue;
-                            }
-                            else
-                            {
-                                double tagSize = tagSizes[id];
-                                vpHomogeneousMatrix cMo;
-                                detector_.getPose(i, tagSize, cam, cMo);
-                                cMo_vec.push_back(cMo);
-                                break;
-                            }
-                        }
-                        pose_matrix = cMo_vec[0];
-                        vpRotationMatrix R_c2a_vp;
-                        pose_matrix.extract(R_c2a_vp);
-                        Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R_c2a_map(R_c2a.data());
-                        R_c2a_map = Eigen::Matrix3d::Map(&R_c2a_vp[0][0]);
-                        R_w2a = R_w2c_temp * R_c2a;
-                        if (ids.size() == 2 || ids[0] == 1)
-                        {
-                            Eigen::Vector3d t(0, -0.0584, 0);
-                            t = R_w2c_temp * t;
-                            Position_after(0) = pose_matrix[0][3] - t[0];
-                            Position_after(1) = pose_matrix[1][3] - t[1];
-                            Position_after(2) = pose_matrix[2][3] - t[2];
+                            continue;
                         }
                         else
                         {
-                            Position_after(0) = pose_matrix[0][3];
-                            Position_after(1) = pose_matrix[1][3];
-                            Position_after(2) = pose_matrix[2][3];
+                            double tagSize = tagSizes[id];
+                            vpHomogeneousMatrix cMo;
+                            detector_.getPose(i, tagSize, cam, cMo);
+                            cMo_vec.push_back(cMo);
+                            break;
                         }
-                        Position_after = R_w2c_temp * Position_after;
-                        Eigen::Quaterniond q(R_w2a);
-                        double yaw = fromQuaternion2yaw(q);
-                        yaw = yaw + M_PI / 2;
-                        desired_yaw = yaw;
                     }
+                    pose_matrix = cMo_vec[0];
+                    vpRotationMatrix R_c2a_vp;
+                    pose_matrix.extract(R_c2a_vp);
+                    Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R_c2a_map(R_c2a.data());
+                    R_c2a_map = Eigen::Matrix3d::Map(&R_c2a_vp[0][0]);
+                    R_w2a = R_w2c_temp * R_c2a;
+                    if (ids.size() == 2 || ids[0] == 1)
+                    {
+                        Eigen::Vector3d t(0, -0.0584, 0);
+                        t = R_w2c_temp * t;
+                        Position_after(0) = pose_matrix[0][3] - t[0];
+                        Position_after(1) = pose_matrix[1][3] - t[1];
+                        Position_after(2) = pose_matrix[2][3] - t[2];
+                    }
+                    else
+                    {
+                        Position_after(0) = pose_matrix[0][3];
+                        Position_after(1) = pose_matrix[1][3];
+                        Position_after(2) = pose_matrix[2][3];
+                    }
+                    Position_after = R_w2c_temp * Position_after;
+                    Eigen::Quaterniond q(R_w2a);
+                    double yaw = fromQuaternion2yaw(q);
+                    yaw = yaw + M_PI / 2;
+                    desired_yaw = yaw;
                 }
+
                 // chrono::time_point<high_resolution_clock> image_timestamp_temp3 = high_resolution_clock::now();
                 //  cout << "image processing time: " << duration_cast<microseconds>(image_timestamp_temp3 - image_timestamp_temp2).count() << endl;
                 auto delay = microseconds(75000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);

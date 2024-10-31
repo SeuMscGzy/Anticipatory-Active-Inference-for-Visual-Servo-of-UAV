@@ -56,7 +56,7 @@ public:
         opt_device = 0;
         poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY;
         quad_decimate = 1.0;
-        nThreads = 2;
+        nThreads = 4;
         display_tag = false;
         color_id = -1;
         thickness = 2;
@@ -75,9 +75,8 @@ public:
         // ROS topic和服务
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
         cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
-        imgsub = nh_.subscribe("/usb_cam/image_raw", 1, &ObjectDetector::imageCallback, this, ros::TransportHints().tcpNoDelay());
         odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
-        timer = nh_.createTimer(ros::Duration(0.08), &ObjectDetector::timerCallback, this);
+        timer = nh_.createTimer(ros::Duration(0.06), &ObjectDetector::timerCallback, this);
         worker_thread = thread(&ObjectDetector::processImages, this);
 
         // 初始化相机
@@ -98,7 +97,7 @@ public:
 
     void start()
     {
-        ros::AsyncSpinner spinner(3); // 使用3个线程
+        ros::AsyncSpinner spinner(2); // 使用2个线程
         spinner.start();
         ros::waitForShutdown();
     }
@@ -134,15 +133,10 @@ public:
     ros::NodeHandle nh_;
     ros::Publisher point_pub_;
     ros::Publisher cv_image_pub;
-    ros::Subscriber imgsub;
     ros::Subscriber odom_sub_;
     ros::Timer timer;
 
     CameraCapture camera_cap;
-
-    time_point<high_resolution_clock> image_timestamp;
-
-    cap_pic_from_cam_srv::CaptureImage srv;
 
     thread worker_thread;
 
@@ -182,26 +176,6 @@ public:
         point_.data.clear();
     }
 
-    void imageCallback(const sensor_msgs::ImageConstPtr &msg)
-    {
-        try
-        {
-            std::lock_guard<std::mutex> lock(image_mutex);
-            image_timestamp = high_resolution_clock::now();
-            cv::Mat distorted_image = cv_bridge::toCvShare(msg, "mono8")->image;
-            if (I.getWidth() == 0 || I.getHeight() == 0)
-            {
-                I.resize(distorted_image.rows, distorted_image.cols); // 根据实际接收到的图像尺寸调整大小
-            }
-            vpImageConvert::convert(distorted_image, I);
-        }
-        catch (cv_bridge::Exception &e)
-        {
-            ROS_ERROR("cv_bridge exception: %s", e.what());
-            return;
-        }
-    }
-
     void timerCallback(const ros::TimerEvent &)
     {
         // 如果当前线程还在处理，则不执行新任务
@@ -232,12 +206,12 @@ public:
         {
             if (processing)
             {
+                cv::Mat distorted_image;
                 Eigen::Matrix3d R_w2c_temp = R_w2c;
                 chrono::time_point<high_resolution_clock> image_timestamp_getimg = high_resolution_clock::now();
                 try
                 {
-                    cv::Mat distorted_image;
-                    distorted_image = camera_cap.captureImage(distorted_image);
+                    camera_cap.captureImage(distorted_image);
                     cv::cvtColor(distorted_image, distorted_image, cv::COLOR_BGR2GRAY);
                     vpImageConvert::convert(distorted_image, I);
                     chrono::time_point<high_resolution_clock> image_timestamp_getimg_over = high_resolution_clock::now();
@@ -245,8 +219,22 @@ public:
                 }
                 catch (cv_bridge::Exception &e)
                 {
-                    processing = false;
                     ROS_ERROR("cv_bridge exception: %s", e.what());
+                    desired_yaw = 0;
+                    lost_target = true;
+                    processing = false;
+                    auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
+                    if (delay.count() > 0)
+                    {
+                        this_thread::sleep_for(delay);
+                    }
+                    else
+                    {
+                        count_for_overtime += 1;
+                    }
+                    publishDetectionResult(image_timestamp_getimg);
+                    auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
+                    cout << delay2.count() << endl;
                     return;
                 }
 
@@ -254,12 +242,10 @@ public:
                 vector<vpHomogeneousMatrix> cMo_vec;
                 vpHomogeneousMatrix pose_matrix;
                 vpImageFilter::gaussianFilter(I, 2, 2);
-                cv::Mat imageMat;
-                vpImageConvert::convert(I, imageMat);
 
                 std_msgs::Header header;
                 header.stamp = ros::Time::now();
-                sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
+                sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", distorted_image).toImageMsg();
                 cv_image_pub.publish(msg);
 
                 detector_.detect(I);
@@ -276,9 +262,22 @@ public:
                     {
                         if (id != 0 && id != 1)
                         {
+                            cout << "wrong detection!!!!!!" << endl;
                             desired_yaw = 0;
                             lost_target = true;
                             processing = false;
+                            auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
+                            if (delay.count() > 0)
+                            {
+                                this_thread::sleep_for(delay);
+                            }
+                            else
+                            {
+                                count_for_overtime += 1;
+                            }
+                            publishDetectionResult(image_timestamp_getimg);
+                            auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
+                            cout << delay2.count() << endl;
                             return;
                         }
                     }
@@ -328,7 +327,7 @@ public:
 
                 // chrono::time_point<high_resolution_clock> image_timestamp_temp3 = high_resolution_clock::now();
                 //  cout << "image processing time: " << duration_cast<microseconds>(image_timestamp_temp3 - image_timestamp_temp2).count() << endl;
-                auto delay = microseconds(75000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
+                auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
                 if (delay.count() > 0)
                 {
                     this_thread::sleep_for(delay);
@@ -341,7 +340,7 @@ public:
                 processing = false;
                 auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
                 cout << delay2.count() << endl;
-                // cout << count_for_overtime << endl;
+                cout << count_for_overtime << endl;
             }
             // 让线程稍作休息，避免空转
             this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒

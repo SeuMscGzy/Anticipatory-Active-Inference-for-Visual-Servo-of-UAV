@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(testpkg)
+project(cap_pic_from_cam_srv)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -12,17 +12,38 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   cv_bridge
-  image_transport
-  cap_pic_from_cam_srv
+  sensor_msgs
+  message_generation
 )
-find_package(OpenCV REQUIRED)
-find_package(Eigen3 REQUIRED) 
-include_directories(${OpenCV_INCLUDE_DIRS})
+
+# 添加srv文件
+add_service_files(
+  FILES
+  CaptureImage.srv
+)
+
+# 生成服务
+generate_messages(
+  DEPENDENCIES
+  sensor_msgs
+)
+
+catkin_package(
+  CATKIN_DEPENDS roscpp cv_bridge sensor_msgs message_runtime
+)
+
+include_directories(
+  ${catkin_INCLUDE_DIRS}
+)
+
+add_executable(capture_service_node src/cap_pic_from_cam_srv.cpp src/CameraCapture.cpp)
+
+target_link_libraries(capture_service_node ${catkin_LIBRARIES} ${OpenCV_LIBS})
+add_dependencies(capture_service_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-find_package(VISP REQUIRED)  # This line finds ViSP and defines VISP_INCLUDE_DIRS and VISP_LIBRARIES
 
-include_directories(${VISP_INCLUDE_DIRS})
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -111,7 +132,7 @@ include_directories(${VISP_INCLUDE_DIRS})
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES testpkg
+#  LIBRARIES cap_pic_from_cam_srv
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -122,14 +143,10 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
-)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/testpkg.cpp
+#   src/${PROJECT_NAME}/cap_pic_from_cam_srv.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -140,7 +157,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(testnode src/testnode.cpp)
+# add_executable(${PROJECT_NAME}_node src/cap_pic_from_cam_srv_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -153,13 +170,10 @@ add_executable(testnode src/testnode.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(testnode
-   ${catkin_LIBRARIES}
-   Eigen3::Eigen
- )
- target_link_libraries(testnode ${OpenCV_LIBS})
- target_link_libraries(testnode ${VISP_LIBRARIES})
- target_link_libraries(testnode ${OpenCV_LIBRARIES})
+# target_link_libraries(${PROJECT_NAME}_node
+#   ${catkin_LIBRARIES}
+# )
+
 #############
 ## Install ##
 #############
@@ -207,7 +221,7 @@ target_link_libraries(testnode
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_testpkg.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_cap_pic_from_cam_srv.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

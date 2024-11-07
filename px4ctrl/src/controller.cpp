@@ -189,7 +189,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   pitch = (des_acc(0) * cos + des_acc(1) * sin) / param_.gra;
   // yaw = fromQuaternion2yaw(des.q);
   Eigen::Quaterniond q_des = Eigen::AngleAxisd(des.yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
-  u.q = imu.q * odom.q.inverse() * q_des;
+  u.q = imu.q * odom.q.inverse() * q_des; //MAP(ENU)->IMU(FLU) * IMU(FLU)->MOCAP(FLU) * MOCAP(FLU)->UAV_DES(FLU) = MAP(ENU)->UAV_DES(FLU)
   // Eigen::Vector3d euler_angles = q_des.toRotationMatrix().eulerAngles(0, 1, 2);
   static int counter_for_output = 0;
   /*if (counter_for_output % 50 == 0)

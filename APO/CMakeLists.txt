@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(Cal_P_q)
+project(APO)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -13,21 +13,8 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
 )
 find_package(Eigen3 REQUIRED) 
-find_package(NLopt REQUIRED)
-find_package(OsqpEigen REQUIRED)
+
 link_directories(/usr/local/lib)
-# 查找并添加OpenMP
-#find_package(OpenMP REQUIRED)
-#if(OpenMP_CXX_FOUND)
-#    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-#endif()
-
-# 手动指定OpenBLAS库和包含文件路径
-#set(OpenBLAS_INCLUDE_DIRS "/usr/include")
-#set(OpenBLAS_LIBRARIES "/usr/lib/aarch64-linux-gnu/libopenblas.so")
-
-#include_directories(${OpenBLAS_INCLUDE_DIRS})
-
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
@@ -38,12 +25,8 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   link_directories(/usr/local/lib)
   /usr/local/include  # 确保包含 CppAD 头文件
-  /usr/local/include/osqp
-  /usr/local/include/acado
-  /usr/local/share/osqp/codegen_files/inc/private
   /usr/include/eigen3
 )
-
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -135,7 +118,7 @@ include_directories(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES Cal_P_q
+#  LIBRARIES APO
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -153,7 +136,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/Cal_P_q.cpp
+#   src/${PROJECT_NAME}/APO.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -164,7 +147,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(Cal_P_q src/Cal_P_q.cpp)
+add_executable(APO src/APO.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -177,9 +160,10 @@ add_executable(Cal_P_q src/Cal_P_q.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(Cal_P_q
+target_link_libraries(APO
    ${catkin_LIBRARIES}
-)
+   Eigen3::Eigen
+ )
 
 #############
 ## Install ##
@@ -228,7 +212,7 @@ target_link_libraries(Cal_P_q
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_Cal_P_q.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_APO.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

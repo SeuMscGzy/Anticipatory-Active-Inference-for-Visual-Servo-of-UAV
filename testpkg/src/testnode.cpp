@@ -70,7 +70,7 @@ public:
             -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
             -0.04586719128150388, 0.018945419570245543, -0.998767876856907;
         R_w2a = Eigen::Matrix3d::Identity();
-        R_w2c = Eigen::Matrix3d::Identity();
+        R_w2c = R_i2c;
 
         // ROS topic和服务
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
@@ -214,8 +214,8 @@ public:
                     camera_cap.captureImage(distorted_image);
                     cv::cvtColor(distorted_image, distorted_image, cv::COLOR_BGR2GRAY);
                     vpImageConvert::convert(distorted_image, I);
-                    chrono::time_point<high_resolution_clock> image_timestamp_getimg_over = high_resolution_clock::now();
-                    cout << "image get time: " << duration_cast<microseconds>(image_timestamp_getimg_over - image_timestamp_getimg).count() << endl;
+                    // chrono::time_point<high_resolution_clock> image_timestamp_getimg_over = high_resolution_clock::now();
+                    // cout << "image get time: " << duration_cast<microseconds>(image_timestamp_getimg_over - image_timestamp_getimg).count() << endl;
                 }
                 catch (cv_bridge::Exception &e)
                 {
@@ -235,7 +235,7 @@ public:
                     publishDetectionResult(image_timestamp_getimg);
                     auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
                     cout << delay2.count() << endl;
-                    return;
+                    continue;
                 }
 
                 // 对图像进行处理
@@ -278,7 +278,7 @@ public:
                             publishDetectionResult(image_timestamp_getimg);
                             auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
                             cout << delay2.count() << endl;
-                            return;
+                            continue;
                         }
                     }
                     lost_target = false;
@@ -319,6 +319,7 @@ public:
                         Position_after(2) = pose_matrix[2][3];
                     }
                     Position_after = R_w2c_temp * Position_after;
+                    cout << "Position_after: " << Position_after.transpose() << endl;
                     Eigen::Quaterniond q(R_w2a);
                     double yaw = fromQuaternion2yaw(q);
                     yaw = yaw + M_PI / 2;
@@ -339,8 +340,8 @@ public:
                 publishDetectionResult(image_timestamp_getimg);
                 processing = false;
                 auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
-                cout << delay2.count() << endl;
-                cout << count_for_overtime << endl;
+                cout << "image delay: " << delay2.count() << endl;
+                cout << "viration times: " << count_for_overtime << endl;
             }
             // 让线程稍作休息，避免空转
             this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒

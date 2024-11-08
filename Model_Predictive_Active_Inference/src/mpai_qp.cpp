@@ -7,6 +7,8 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
       precice_w1(precice_w1), precice_w2(precice_w2), precice_z_u(precice_z_u), e1(e1),
       umin(umin), umax(umax)
 {
+    //cout << Np_ << Np_ << endl;
+    //cout << dt;
     bigMatrix1.resize(Np + 2 * (Np + 1), Np + 2 * (Np + 1));
     bigMatrix2.resize(1, Np + 2 * (Np + 1));
 
@@ -20,21 +22,19 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     // 构建矩阵 M1 到 M4
     MatrixXd M1(1, 4);
     M1 << 0, 0, e1, 1;
-
+    //cout << M1 << endl;
     MatrixXd M2(1, 4);
     M2 << 1, 0, -1, 0;
 
     MatrixXd M3(1, 4);
     M3 << 0, 0, 0, e1;
-
+    //cout << M3 << endl;
     MatrixXd M4(1, 4);
     M4 << 0, 1, 0, -1;
 
     MatrixXd M5(4, 4);
-    M5 = 0.5 * precice_w1 * M1.transpose() * M1 +
-         0.5 * precice_z1 * M2.transpose() * M2 +
-         0.5 * precice_w2 * M3.transpose() * M3 +
-         0.5 * precice_z2 * M4.transpose() * M4;
+    M5 = 0.5 * precice_w1 * M1.transpose() * M1 + 0.5 * precice_z1 * M2.transpose() * M2 + 0.5 * precice_w2 * M3.transpose() * M3 + 0.5 * precice_z2 * M4.transpose() * M4;
+    //cout << M5 << endl;
 
     MatrixXd M6 = kroneckerProduct(MatrixXd::Identity(Np + 1, Np + 1), M5);
 
@@ -111,6 +111,7 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     MatrixXd M9 = MatrixXd::Zero(Np + 2 * (Np + 1), Np + 2 * (Np + 1));
     M9.block(0, 0, Np, Np) = MatrixXd::Identity(Np, Np);
     bigMatrix1 = 2 * M8.transpose() * M7.transpose() * M6 * M7 * M8 + M9 * precice_z_u;
+    //cout << bigMatrix1 << endl;
     //  Compute bigMatrix2 using Eigen
     MatrixXd R = MatrixXd::Zero(2, 2);
     R(0, 0) = precice_z1;
@@ -121,10 +122,11 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
         bigR.block(2 * i, 2 * i, 2, 2) = R;
     }
     MatrixXd bigMatrix2_ = F.transpose() * bigR * T1;
-    //cout << bigMatrix2_ << endl;
+    // cout << bigMatrix2_ << endl;
     bigMatrix2 = bigMatrix2_;
     // Initialize the solver matrices
     initsolver();
+    cout << "Optimizer initialized" << endl;
 }
 
 void Optimizer::shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolution)
@@ -157,26 +159,26 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
     rowVec << x1_init_, x2_init_;
     q = rowVec * bigMatrix2;
     // cout << q << endl;
-    l[Np] = mu_init_-0.1;
-    u[Np] = mu_init_+0.1;
-    l[Np + 1] = mu_p_init_-0.1;
-    u[Np + 1] = mu_p_init_+0.1;
-
+    l[Np] = mu_init_ - 0.1;
+    u[Np] = mu_init_ + 0.1;
+    l[Np + 1] = mu_p_init_ - 0.1;
+    u[Np + 1] = mu_p_init_ + 0.1;
+    // cout << q << endl;
     // 更新求解器的梯度和边界
     solver.updateGradient(q);
     solver.updateLowerBound(l);
     solver.updateUpperBound(u);
 
     // 在更新求解器的梯度和边界之前，打印 l 和 u
-    std::cout << "l: " << l.transpose() << std::endl;
-    std::cout << "u: " << u.transpose() << std::endl;
+    // std::cout << "l: " << l.transpose() << std::endl;
+    // std::cout << "u: " << u.transpose() << std::endl;
 
     // 求解更新后的问题
     auto sol_result = solver.solveProblem();
     if (sol_result == OsqpEigen::ErrorExitFlag::NoError)
     {
         VectorXd solution = solver.getSolution();
-       // cout << "solution: " << solution << endl;
+        // cout << "solution: " << solution << endl;
         VectorXd Dualsolution = solver.getDualSolution();
 
         // Extracting u which has Np elements
@@ -211,13 +213,12 @@ void Optimizer::initsolver()
     // 初始化求解器
     solver.data()->setNumberOfVariables(Np + 2 * (Np + 1));
     solver.data()->setNumberOfConstraints(Np + 2);
-    solver.settings()->setAbsoluteTolerance(2e-3); // 设置绝对误差阈值
-    solver.settings()->setRelativeTolerance(2e-3); // 设置相对误差阈值
-    solver.settings()->setMaxIteration(60);       // 设置最大迭代次数为100
+    solver.settings()->setAbsoluteTolerance(1e-3); // 设置绝对误差阈值
+    solver.settings()->setRelativeTolerance(1e-3); // 设置相对误差阈值
+    solver.settings()->setMaxIteration(100);       // 设置最大迭代次数为100
     solver.settings()->setVerbosity(false);
     P = bigMatrix1.sparseView();
-    // cout << bigMatrix1 << endl;
-    //cout << P << endl;
+    // cout << P << endl;
     Eigen::VectorXd q1(Np + 2 * (Np + 1));
     q = q1;
 

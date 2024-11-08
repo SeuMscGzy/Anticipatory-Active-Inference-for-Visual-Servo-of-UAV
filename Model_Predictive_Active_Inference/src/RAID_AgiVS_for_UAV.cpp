@@ -7,7 +7,7 @@ RAID_AgiVS::RAID_AgiVS(int index)
       px4_state(1),
       x_real(0.0),
       xv_real(0.0),
-      optimizer_x(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, e1, precice_z_u, umin, umax)
+      optimizer_x(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, precice_z_u, e1, umin, umax)
 {
     px4_state_sub = nh.subscribe("/px4_state_pub", 1, &RAID_AgiVS::StateCallback, this, ros::TransportHints().tcpNoDelay());
     relative_pos_sub = nh.subscribe("/hat_error_xyz", 1, &RAID_AgiVS::relative_pos_Callback, this, ros::TransportHints().tcpNoDelay());
@@ -52,7 +52,11 @@ void RAID_AgiVS::cal_optical_ctrl()
 {
     double mux = optical_x[1];
     double mux_p = optical_x[2];
-    optical_x = optimizer_x.optimize(x_real, xv_real, mux, mux_p);
+    double x = x_real;
+    double xv = xv_real;
+    //optical_x = optimizer_x.optimize(x, xv, mux, mux_p);
+    optical_x = optimizer_x.optimize(3, 0, 3, 0);
+    cout << x << " " << xv << endl;
 }
 
 void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
@@ -60,15 +64,15 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
     relative_pos.data = msg->data;
     x_real = relative_pos.data[2 * which_axis];
     xv_real = relative_pos.data[2 * which_axis + 1];
-    if (px4_state != 3) // 不在cmd模式下时，控制量为0；
+    /*if (px4_state != 3) // 不在cmd模式下时，控制量为0；
     {
         u_x = 0;
         std_msgs::Float64 u_msg;
         u_msg.data = u_x;
         pub_u.publish(u_msg);
-    }
-    else
-    {
+    }*/
+    //else
+    //{
         if (land_or_just_tracking)
         {
             if (abs(msg->data[0] > 0.15) || abs(msg->data[2] > 0.15))
@@ -94,7 +98,7 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
             u_msg.data = u_x;
             pub_u.publish(u_msg);
         }
-    }
+    //}
 }
 
 void RAID_AgiVS::StateCallback(const std_msgs::Int32::ConstPtr &msg)

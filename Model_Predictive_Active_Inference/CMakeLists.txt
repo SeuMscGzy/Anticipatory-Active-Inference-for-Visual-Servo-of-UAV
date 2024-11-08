@@ -36,7 +36,6 @@ catkin_package(
 
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  link_directories(/usr/local/lib)
   /usr/local/include  # 确保包含 CppAD 头文件
   /usr/local/include/osqp
   /usr/local/include/acado

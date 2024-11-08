@@ -11,7 +11,7 @@ using namespace Eigen;
 class Optimizer
 {
 public:
-    Optimizer(double dt, int Np, double precice_z1, double precice_z2,
+    Optimizer(double dt, int Np_, double precice_z1, double precice_z2,
               double precice_w1, double precice_w2, double precice_z_u, double e1,
               double umin, double umax);
 

@@ -9,7 +9,6 @@ int main(int argc, char **argv)
     nh.param("index", index, 0);
     cout << "index: " << index << endl;
     RAID_AgiVS controller(index);
-
     ros::spin();
     return 0;
 }

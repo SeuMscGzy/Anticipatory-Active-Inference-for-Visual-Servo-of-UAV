@@ -9,8 +9,7 @@ class RAID_AgiVS
 {
 public:
     // parameters and variables for the optimization problem
-    Optimizer optimizer_x;
-    double dt = 0.01;
+    double dt = 0.02;
     int Np = 30;
     double precice_z1 = 2;
     double precice_z2 = 1;
@@ -20,11 +19,13 @@ public:
     double precice_z_u = 0.005;
     double umin = -4;
     double umax = 4;
-
-    double x_real, xv_real;
+    Optimizer optimizer_x;
+    vector<double> optical_x = {0, 1, 0, 0};
+    double x_real;
+    double xv_real;
 
     // parameters and variables for the controller
-    vector<double> optical_x = {0, 0, 0, 0};
+
     double u_x;
     double which_axis;
     std_msgs::Float64MultiArray relative_pos;
@@ -45,11 +46,4 @@ public:
     void StateCallback(const std_msgs::Int32::ConstPtr &msg);
     void relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg);
     double adjustBias(double value, bool use_bias);
-    void spin()
-    {
-        while (ros::ok())
-        {
-            ros::spin();
-        }
-    }
 };

@@ -31,7 +31,7 @@ APO::APO()
         0, 1;
     relative_pos_sub = nh.subscribe("/point_with_fixed_delay", 1, &APO::relative_pos_Callback, this, ros::TransportHints().tcpNoDelay());
     Odom_sub = nh.subscribe("/mavros/local_position/odom", 1, &APO::Odom_Callback, this, ros::TransportHints().tcpNoDelay());
-    timer = nh.createTimer(ros::Duration(0.01), &APO::timerCallback, this);
+    timer = nh.createTimer(ros::Duration(0.02), &APO::timerCallback, this);
     hat_pub = nh.advertise<std_msgs::Float64MultiArray>("/hat_error_xyz", 1);
 }
 
@@ -39,9 +39,10 @@ void APO::timerCallback(const ros::TimerEvent &)
 {
     function(loss_or_not_); // 立即执行一次
     timer_count++;          // 增加计数
-    if (timer_count == 5 || is_data_refreshed)
+    if (is_data_refreshed)
     {
         timer_count = 0;
+        is_data_refreshed = false;
     }
 }
 
@@ -68,6 +69,7 @@ void APO::function(bool loss_or_not_)
     }
     if (first_time_in_fun)
     {
+        is_data_refreshed = false;
         first_time_in_fun = false;
         predict_tag_x = tag_x_real;
         hat_tag_x(0) = tag_x_real;
@@ -81,7 +83,7 @@ void APO::function(bool loss_or_not_)
     }
     else
     {
-        if (timer_count == 0 && is_data_refreshed)
+        if (timer_count == 0)
         {
             is_data_refreshed = false;
             predict_tag_x = tag_x_real;

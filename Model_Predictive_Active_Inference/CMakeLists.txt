@@ -11,6 +11,10 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   std_msgs
+  px4ctrl
+  quadrotor_msgs
+  uav_utils
+  pluginlib
 )
 find_package(Eigen3 REQUIRED) 
 find_package(NLopt REQUIRED)
@@ -32,6 +36,7 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS roscpp
+  px4ctrl quadrotor_msgs uav_utils
 )
 
 include_directories(

@@ -16,10 +16,10 @@ public:
     Eigen::Matrix2d A_bar, A0;
     double predict_tag_x, tag_x_real, predict_tag_y, tag_y_real, predict_tag_z, tag_z_real;
     double uav_x, uav_y, uav_z, uav_vx, uav_vy, uav_vz;
+    double des_yaw;
 
     int timer_count;
     ros::Timer timer;
-    std_msgs::Float64MultiArray relative_pos;
 
     // variables for control logic
     bool first_time_in_fun, loss_target, loss_or_not_;

@@ -18,6 +18,7 @@ APO::APO()
       uav_vx(0.0),
       uav_vy(0.0),
       uav_vz(0.0),
+      des_yaw(0.0),
       timer_count(0),
       loss_target(true),
       loss_or_not_(true),
@@ -111,16 +112,21 @@ void APO::function(bool loss_or_not_)
     msg.data.push_back(hat_tag_y(1) - uav_vy);
     msg.data.push_back(hat_tag_z(0) - uav_z);
     msg.data.push_back(hat_tag_z(1) - uav_vz);
+    msg.data.push_back(tag_x_real - uav_x);
+    msg.data.push_back(tag_y_real - uav_y);
+    msg.data.push_back(tag_z_real - uav_z);
+    msg.data.push_back(loss_or_not_);
+    msg.data.push_back(des_yaw);
     hat_pub.publish(msg);
 }
 
 void APO::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
 {
-    relative_pos.data = msg->data;
-    tag_x_real = relative_pos.data[0] + uav_x;
-    tag_y_real = relative_pos.data[1] + uav_y;
-    tag_z_real = relative_pos.data[2] + uav_z;
-    loss_or_not_ = relative_pos.data[4];
+    tag_x_real = msg->data[0] + uav_x;
+    tag_y_real = msg->data[1] + uav_y;
+    tag_z_real = msg->data[2] + uav_z;
+    loss_or_not_ = msg->data[4];
+    des_yaw = msg->data[5];
     is_data_refreshed = true;
 }
 

@@ -4,11 +4,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "control_publisher");
     ros::NodeHandle nh("~");
-    
-    int index;
-    nh.param("index", index, 0);
-    cout << "index: " << index << endl;
-    RAID_AgiVS controller(index);
-    ros::spin();
+    RAID_AgiVS controller;
+    ros::waitForShutdown();
     return 0;
 }

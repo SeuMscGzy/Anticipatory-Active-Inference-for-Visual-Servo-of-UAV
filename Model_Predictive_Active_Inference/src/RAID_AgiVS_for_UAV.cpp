@@ -54,17 +54,26 @@ void RAID_AgiVS::xAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
-        auto start_time = std::chrono::high_resolution_clock::now();
-        double mux = optical_x[1];
-        double mux_p = optical_x[2];
-        double x = x_real;
-        double xv = xv_real;
-        optical_x = optimizer_x.optimize(x, xv, mux, mux_p);
-        u_x = optical_x[0];
-        auto end_time = std::chrono::high_resolution_clock::now();
-        double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
-        ROS_INFO("Execution time x: %f seconds", elapsed_time);
-        rate.sleep();
+        if (px4_state == 3)
+        {
+            auto start_time = std::chrono::high_resolution_clock::now();
+            double mux = optical_x[1];
+            cout << "mux: " << mux << endl;
+            double mux_p = optical_x[2];
+            double x = x_real;
+            double xv = xv_real;
+            optical_x = optimizer_x.optimize(x, xv, mux, mux_p);
+            u_x = optical_x[0];
+            auto end_time = std::chrono::high_resolution_clock::now();
+            double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
+            ROS_INFO("Execution time x: %f seconds", elapsed_time);
+            rate.sleep();
+        }
+        else
+        {
+            u_x = 0;
+            rate.sleep();
+        }
     }
 }
 
@@ -73,17 +82,25 @@ void RAID_AgiVS::yAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
-        auto start_time = std::chrono::high_resolution_clock::now();
-        double muy = optical_y[1];
-        double muy_p = optical_y[2];
-        double y = y_real;
-        double yv = yv_real;
-        optical_y = optimizer_y.optimize(y, yv, muy, muy_p);
-        u_y = optical_y[0];
-        auto end_time = std::chrono::high_resolution_clock::now();
-        double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
-        ROS_INFO("Execution time y: %f seconds", elapsed_time);
-        rate.sleep();
+        if (px4_state == 3)
+        {
+            auto start_time = std::chrono::high_resolution_clock::now();
+            double muy = optical_y[1];
+            double muy_p = optical_y[2];
+            double y = y_real;
+            double yv = yv_real;
+            optical_y = optimizer_y.optimize(y, yv, muy, muy_p);
+            u_y = optical_y[0];
+            auto end_time = std::chrono::high_resolution_clock::now();
+            double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
+            ROS_INFO("Execution time y: %f seconds", elapsed_time);
+            rate.sleep();
+        }
+        else
+        {
+            u_y = 0;
+            rate.sleep();
+        }
     }
 }
 
@@ -92,17 +109,25 @@ void RAID_AgiVS::zAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
-        auto start_time = std::chrono::high_resolution_clock::now();
-        double muz = optical_z[1];
-        double muz_p = optical_z[2];
-        double z = z_real;
-        double zv = zv_real;
-        optical_z = optimizer_z.optimize(z, zv, muz, muz_p);
-        u_z = optical_z[0];
-        auto end_time = std::chrono::high_resolution_clock::now();
-        double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
-        ROS_INFO("Execution time z: %f seconds", elapsed_time);
-        rate.sleep();
+        if (px4_state == 3)
+        {
+            auto start_time = std::chrono::high_resolution_clock::now();
+            double muz = optical_z[1];
+            double muz_p = optical_z[2];
+            double z = z_real;
+            double zv = zv_real;
+            optical_z = optimizer_z.optimize(z, zv, muz, muz_p);
+            u_z = optical_z[0];
+            auto end_time = std::chrono::high_resolution_clock::now();
+            double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
+            ROS_INFO("Execution time z: %f seconds", elapsed_time);
+            rate.sleep();
+        }
+        else
+        {
+            u_z = 0;
+            rate.sleep();
+        }
     }
 }
 
@@ -144,8 +169,8 @@ void RAID_AgiVS::adjustBias(bool use_bias) // which_axis: 0 for x, 1 for y, 2 fo
     {
         if (use_bias)
         {
-            x_real = x_real + 0.1;
-            y_real = y_real + 0.1;
+            // x_real = x_real + 0.1;
+            // y_real = y_real + 0.1;
             z_real = z_real + 1;
         }
     }

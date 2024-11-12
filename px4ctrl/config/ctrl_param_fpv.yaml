@@ -5,7 +5,7 @@
 mass        : 1.2117 # kg 
 gra         : 9.81 
 pose_solver : 1     # 0:From ZhepeiWang (drag & less singular) 1:From ZhepeiWang, 2:From rotor-drag    
-ctrl_freq_max   : 100.0
+ctrl_freq_max   : 50.0
 use_bodyrate_ctrl: false
 max_manual_vel: 1.0
 max_angle: 15  # Attitude angle limit in degree. A negative value means no limit.

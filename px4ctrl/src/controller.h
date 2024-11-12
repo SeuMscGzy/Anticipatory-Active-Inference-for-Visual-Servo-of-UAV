@@ -22,7 +22,7 @@ struct Desired_State_t
 	double yaw;
 	double yaw_rate;
 
-	Desired_State_t(){};
+	Desired_State_t() {};
 
 	Desired_State_t(Odom_Data_t &odom)
 		: p(odom.p),
@@ -31,7 +31,7 @@ struct Desired_State_t
 		  j(Eigen::Vector3d::Zero()),
 		  q(odom.q),
 		  yaw(uav_utils::get_yaw_from_quaternion(odom.q)),
-		  yaw_rate(0){};
+		  yaw_rate(0) {};
 };
 
 struct Controller_Output_t
@@ -59,11 +59,22 @@ struct Controller_Output_t
 class LinearControl
 {
 public:
+	enum FlightState
+	{
+		GROUND,
+		TAKING_OFF,
+		FLYING,
+		LANDING
+	};
+
+	FlightState flight_state = GROUND;
 	LinearControl(Parameter_t &);
 	quadrotor_msgs::Px4ctrlDebug calculateControl(const Desired_State_t &des,
 												  const Odom_Data_t &odom,
 												  const Imu_Data_t &imu,
 												  Controller_Output_t &u, int state_count, bool in_landing_);
+	void updateFlightState(const Desired_State_t &des, const Odom_Data_t &odom, int state_count, bool in_landing_);
+	void calculateThrust(Controller_Output_t &u, const Eigen::Vector3d &des_acc);
 	bool estimateThrustModel(const Eigen::Vector3d &est_v,
 							 const Parameter_t &param);
 	void resetThrustMapping(void);
@@ -81,11 +92,6 @@ private:
 	const double rho2_ = 0.998; // do not change
 	double thr2acc_;
 	double P_;
-	int last_state_count = 1;
-	int enter_count = 200;
-	int takeoff_count = 500;
-	bool in_the_slow_thrust = false;
-	bool last_in_the_slow_thrust = false;
 	double computeDesiredCollectiveThrustSignal(const Eigen::Vector3d &des_acc);
 	double fromQuaternion2yaw(Eigen::Quaterniond q);
 };

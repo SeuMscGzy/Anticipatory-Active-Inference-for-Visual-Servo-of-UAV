@@ -4,11 +4,10 @@
 using namespace std;
 using namespace uav_utils;
 
-PX4CtrlFSM::PX4CtrlFSM(Parameter_t &param_, LinearControl &controller_) : param(param_), nh("~"), loss_target_time_count(15), controller(controller_) /*, thrust_curve(thrust_curve_)*/
+PX4CtrlFSM::PX4CtrlFSM(Parameter_t &param_, LinearControl &controller_) : param(param_), nh("~"), loss_target_time_count(10), controller(controller_) /*, thrust_curve(thrust_curve_)*/
 {
 	state = MANUAL_CTRL;
 	hover_pose.setZero();
-	// loss_target_sub = nh.subscribe("/point_with_unfixed_delay", 100, &PX4CtrlFSM::loss_taget_callback, this);
 }
 
 /*
@@ -82,9 +81,8 @@ void PX4CtrlFSM::process()
 			toggle_offboard_mode(false);
 			ROS_WARN("[px4ctrl] AUTO_HOVER(L2) --> MANUAL_CTRL(L1)");
 		}
-		else if (rc_data.is_command_mode && cmd_is_received(now_time) && loss_target_time_count == 0 && !takeoff_land_data.triggered && !in_landing)
+		else if (rc_data.is_command_mode && cmd_is_received(now_time) && loss_target_time_count == 0 /*&& !takeoff_land_data.triggered*/ && !in_landing)
 		{
-			// cout << "进了这里" << endl;
 			if (state_data.current_state.mode == "OFFBOARD")
 			{
 				state = CMD_CTRL;
@@ -221,7 +219,7 @@ void PX4CtrlFSM::loss_target_callback(const std_msgs::Float64MultiArray::ConstPt
 	}
 	else
 	{
-		if (loss_target_time_count < 15)
+		if (loss_target_time_count < 10)
 		{
 			loss_target_time_count++;
 		}

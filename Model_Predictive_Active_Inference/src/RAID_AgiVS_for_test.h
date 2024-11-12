@@ -43,7 +43,7 @@ public:
     ros::Publisher pub_hat_x;
 
     // functions
-    RAID_AgiVS();
+    RAID_AgiVS(ros::NodeHandle &nh);
     void cal_single_axis_ctrl_input();
     void timerCallback(const ros::TimerEvent &);
     void function();

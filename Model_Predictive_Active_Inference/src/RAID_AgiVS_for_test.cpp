@@ -1,8 +1,8 @@
 #include "RAID_AgiVS_for_test.h"
 
 // 构造函数
-RAID_AgiVS::RAID_AgiVS()
-    : nh("~"),
+RAID_AgiVS::RAID_AgiVS(ros::NodeHandle &nh)
+    : nh(nh),
       hat_x(Eigen::Vector2d::Zero()),
       predict_y(0.0),
       y_real(0.0),

@@ -17,8 +17,8 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     Ad << 1, dt,
         0, 1;
     MatrixXd Bd(2, 1);
-    Bd << 0.5 * dt * dt,
-        dt;
+    Bd << -0.5 * dt * dt,
+        -dt;
     // 构建矩阵 M1 到 M4
     MatrixXd M1(1, 4);
     M1 << 0, 0, e1, 1;

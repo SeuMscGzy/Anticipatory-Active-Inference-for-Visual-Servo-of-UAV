@@ -1,9 +1,8 @@
 #include "RAID_AgiVS_for_UAV.h"
 
 // 构造函数
-RAID_AgiVS::RAID_AgiVS()
-    : nh("~"),
-      spinner(5),
+RAID_AgiVS::RAID_AgiVS(ros::NodeHandle &nh)
+    : nh(nh),
       px4_state(1),
       x_real(0.0),
       xv_real(0.0),
@@ -24,8 +23,6 @@ RAID_AgiVS::RAID_AgiVS()
 
     px4_state_sub = nh.subscribe("/px4_state_pub", 1, &RAID_AgiVS::StateCallback, this, ros::TransportHints().tcpNoDelay());
     relative_pos_sub = nh.subscribe("/hat_error_xyz", 1, &RAID_AgiVS::relative_pos_Callback, this, ros::TransportHints().tcpNoDelay());
-    // 启动 ROS 异步 spinner
-    spinner.start();
 
     // 启动控制循环线程
     startControlLoops();
@@ -33,9 +30,6 @@ RAID_AgiVS::RAID_AgiVS()
 
 RAID_AgiVS::~RAID_AgiVS()
 {
-    // 停止 spinner
-    spinner.stop();
-
     // 确保控制线程安全退出
     if (x_thread.joinable())
         x_thread.join();
@@ -60,12 +54,16 @@ void RAID_AgiVS::xAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
+        auto start_time = std::chrono::high_resolution_clock::now();
         double mux = optical_x[1];
         double mux_p = optical_x[2];
         double x = x_real;
         double xv = xv_real;
         optical_x = optimizer_x.optimize(x, xv, mux, mux_p);
         u_x = optical_x[0];
+        auto end_time = std::chrono::high_resolution_clock::now();
+        double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
+        ROS_INFO("Execution time x: %f seconds", elapsed_time);
         rate.sleep();
     }
 }
@@ -75,12 +73,16 @@ void RAID_AgiVS::yAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
+        auto start_time = std::chrono::high_resolution_clock::now();
         double muy = optical_y[1];
         double muy_p = optical_y[2];
         double y = y_real;
         double yv = yv_real;
         optical_y = optimizer_y.optimize(y, yv, muy, muy_p);
         u_y = optical_y[0];
+        auto end_time = std::chrono::high_resolution_clock::now();
+        double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
+        ROS_INFO("Execution time y: %f seconds", elapsed_time);
         rate.sleep();
     }
 }
@@ -90,12 +92,16 @@ void RAID_AgiVS::zAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
+        auto start_time = std::chrono::high_resolution_clock::now();
         double muz = optical_z[1];
         double muz_p = optical_z[2];
         double z = z_real;
         double zv = zv_real;
         optical_z = optimizer_z.optimize(z, zv, muz, muz_p);
         u_z = optical_z[0];
+        auto end_time = std::chrono::high_resolution_clock::now();
+        double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
+        ROS_INFO("Execution time z: %f seconds", elapsed_time);
         rate.sleep();
     }
 }
@@ -165,7 +171,7 @@ void RAID_AgiVS::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstP
         }
         else
         {
-            if ((msg->data[8] < 0.15 && msg->data[9] == 0 && px4_state == 3) || keep_in_land)
+            if ((abs(msg->data[8]) < 0.15 && msg->data[9] == 0 && px4_state == 3) || keep_in_land)
             {
                 // Send forced landing command as we might be losing sight of the target, open-loop close proximity landing
                 keep_in_land = true;

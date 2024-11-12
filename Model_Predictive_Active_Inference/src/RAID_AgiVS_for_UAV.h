@@ -15,7 +15,7 @@ class RAID_AgiVS
 public:
     // parameters and variables for the optimization problem
     double dt = 0.02;
-    int Np = 30;
+    int Np = 20;
     double precice_z1 = 2;
     double precice_z2 = 1;
     double precice_w1 = 2;
@@ -27,9 +27,9 @@ public:
     Optimizer optimizer_x;
     Optimizer optimizer_y;
     Optimizer optimizer_z;
-    vector<double> optical_x = {0, 1, 0, 0};
-    vector<double> optical_y = {0, 1, 0, 0};
-    vector<double> optical_z = {0, 1, 0, 0};
+    vector<double> optical_x = {0, 0, 0, 0};
+    vector<double> optical_y = {0, 0, 0, 0};
+    vector<double> optical_z = {0, 0, 0, 0};
     std::atomic<double> x_real;
     std::atomic<double> xv_real;
     std::atomic<double> y_real;
@@ -56,8 +56,6 @@ public:
     ros::Subscriber px4_state_sub;
     ros::Subscriber relative_pos_sub;
     ros::Publisher pub_u;
-    // ROS 异步线程
-    ros::AsyncSpinner spinner;
 
     // 控制线程
     std::thread x_thread;
@@ -66,7 +64,7 @@ public:
     std::thread u_pub_thread;
 
     // functions
-    RAID_AgiVS();
+    RAID_AgiVS(ros::NodeHandle &nh);
     ~RAID_AgiVS();
     void startControlLoops();
     void xAxisControlLoop();

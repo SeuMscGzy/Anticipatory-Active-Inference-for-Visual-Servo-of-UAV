@@ -389,19 +389,20 @@ void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const r
 	else
 	{
 		mavros_msgs::PositionTarget msg;
-		msg.header.stamp = stamp;
-		msg.header.frame_id = std::string("FCU");
-		msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_BODY_NED;
-		msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
+		msg.header.stamp = ros::Time::now();
+		msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+		msg.type_mask = mavros_msgs::PositionTarget::IGNORE_VX |
+						mavros_msgs::PositionTarget::IGNORE_VY |
+						mavros_msgs::PositionTarget::IGNORE_VZ |
+						mavros_msgs::PositionTarget::IGNORE_PX |
 						mavros_msgs::PositionTarget::IGNORE_PY |
 						mavros_msgs::PositionTarget::IGNORE_PZ |
-						mavros_msgs::PositionTarget::IGNORE_AFX |
-						mavros_msgs::PositionTarget::IGNORE_AFY |
-						mavros_msgs::PositionTarget::IGNORE_AFZ;
-		msg.acceleration_or_force.x = u.acc[0];
-		msg.acceleration_or_force.y = u.acc[1];
+						mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+		// 设置你想要的加速度值
+		msg.acceleration_or_force.x = u.acc[0]; // X轴加速度
+		msg.acceleration_or_force.y = u.acc[1]; // Y轴加速度
 		msg.acceleration_or_force.z = u.acc[2];
-		msg.yaw = u.yaw;
+		msg.yaw = u.yaw; // 偏航角，例如，1.57弧度约等于90度
 		ctrl_FCU_pub_cmd.publish(msg);
 	}
 }

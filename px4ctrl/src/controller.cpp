@@ -104,14 +104,17 @@ void LinearControl::calculateThrust(Controller_Output_t &u, const Eigen::Vector3
   switch (flight_state)
   {
   case GROUND:
+  {
     u.thrust = MIN_THRUST;
     // 重置PID控制器
     velocity_controller_x.init();
     velocity_controller_y.init();
     velocity_controller_z.init();
     break;
+  }
 
   case SLOW_START:
+  {
     desired_thrust = computeDesiredCollectiveThrustSignal(des_acc);
     // 平滑增加推力
     u.thrust = desired_thrust * slow_start_step * 0.01;
@@ -127,13 +130,17 @@ void LinearControl::calculateThrust(Controller_Output_t &u, const Eigen::Vector3
       velocity_controller_z.init();
     }
     break;
+  }
 
   case FLYING:
+  {
     u.thrust = computeDesiredCollectiveThrustSignal(des_acc);
-    u.acc = des_acc;
+    u.acc = des_acc - Eigen::Vector3d(0, 0, param_.gra); // 净加速度 而非计算推力时所需要的考虑重力加速度后的加速度。
     break;
+  }
 
   case LANDING:
+  {
     // 平滑减小推力
     if (land_step == 0) // 第一次进入降落状态时，记录悬停推力
     {
@@ -151,10 +158,13 @@ void LinearControl::calculateThrust(Controller_Output_t &u, const Eigen::Vector3
       land_step = 100;
     }
     break;
+  }
 
   default:
+  {
     u.thrust = MIN_THRUST;
     break;
+  }
   }
 
   // 确保推力在最小和最大值之间
@@ -236,7 +246,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   Eigen::Quaterniond q_des = Eigen::AngleAxisd(des.yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
   u.q = q_des; // MAP(ENU)->IMU(FLU) * IMU(FLU)->MOCAP(FLU) * MOCAP(FLU)->UAV_DES(FLU) = MAP(ENU)->UAV_DES(FLU)
   u.yaw = des.yaw;
-  if (flight_state == FLYING && state_count ==2)
+  if (flight_state == FLYING && state_count == 2)
   {
     timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), u.thrust));
   }

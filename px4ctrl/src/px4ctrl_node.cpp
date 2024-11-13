@@ -97,8 +97,8 @@ int main(int argc, char *argv[])
                                      ros::VoidConstPtr(),
                                      ros::TransportHints().tcpNoDelay());
 
-    // fsm.ctrl_FCU_pub = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 0);
     fsm.ctrl_FCU_pub = nh.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude", 1);
+    fsm.ctrl_FCU_pub_cmd = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 1);
     fsm.traj_start_trigger_pub = nh.advertise<geometry_msgs::PoseStamped>("/traj_start_trigger", 10);
     fsm.state_pub = nh.advertise<std_msgs::Int32>("/px4_state_pub", 1);
     fsm.debug_pub = nh.advertise<quadrotor_msgs::Px4ctrlDebug>("/debugPx4ctrl", 10); // debug

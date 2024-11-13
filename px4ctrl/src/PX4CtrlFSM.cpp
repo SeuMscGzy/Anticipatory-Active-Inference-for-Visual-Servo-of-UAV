@@ -118,7 +118,7 @@ void PX4CtrlFSM::process()
 		}
 		else if (!rc_data.is_command_mode || !cmd_is_received(now_time) || loss_target_time_count > 3 || in_landing)
 		{
-			if(in_landing)
+			if (in_landing)
 			{
 				ROS_INFO("[px4ctrl] Need AUTO_HOVER(L2) Because of Landing!");
 			}
@@ -178,7 +178,7 @@ void PX4CtrlFSM::process()
 	}
 
 	// STEP3: estimate thrust model
-	if (state == AUTO_HOVER || state == CMD_CTRL)
+	if (state == AUTO_HOVER)
 	{
 		// controller.estimateThrustModel(imu_data.a, bat_data.volt, param);
 		controller.estimateThrustModel(imu_data.a, param);
@@ -371,18 +371,39 @@ bool PX4CtrlFSM::recv_new_odom()
 
 void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const ros::Time &stamp) // 发送姿态和力矩指令
 {
-	mavros_msgs::AttitudeTarget msg;
-	msg.header.stamp = stamp;
-	msg.header.frame_id = std::string("FCU");
-	msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
-					mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
-					mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
-	msg.orientation.x = u.q.x();
-	msg.orientation.y = u.q.y();
-	msg.orientation.z = u.q.z();
-	msg.orientation.w = u.q.w();
-	msg.thrust = u.thrust;
-	ctrl_FCU_pub.publish(msg);
+	if (state == AUTO_HOVER)
+	{
+		mavros_msgs::AttitudeTarget msg;
+		msg.header.stamp = stamp;
+		msg.header.frame_id = std::string("FCU");
+		msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
+						mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
+						mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
+		msg.orientation.x = u.q.x();
+		msg.orientation.y = u.q.y();
+		msg.orientation.z = u.q.z();
+		msg.orientation.w = u.q.w();
+		msg.thrust = u.thrust;
+		ctrl_FCU_pub.publish(msg);
+	}
+	else
+	{
+		mavros_msgs::PositionTarget msg;
+		msg.header.stamp = stamp;
+		msg.header.frame_id = std::string("FCU");
+		msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_BODY_NED;
+		msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
+						mavros_msgs::PositionTarget::IGNORE_PY |
+						mavros_msgs::PositionTarget::IGNORE_PZ |
+						mavros_msgs::PositionTarget::IGNORE_AFX |
+						mavros_msgs::PositionTarget::IGNORE_AFY |
+						mavros_msgs::PositionTarget::IGNORE_AFZ;
+		msg.acceleration_or_force.x = u.acc[0];
+		msg.acceleration_or_force.y = u.acc[1];
+		msg.acceleration_or_force.z = u.acc[2];
+		msg.yaw = u.yaw;
+		ctrl_FCU_pub_cmd.publish(msg);
+	}
 }
 
 void PX4CtrlFSM::publish_trigger(const nav_msgs::Odometry &odom_msg)

@@ -44,6 +44,7 @@ public:
 	ros::Publisher traj_start_trigger_pub;
 	ros::Publisher state_pub;
 	ros::Publisher ctrl_FCU_pub;
+	ros::Publisher ctrl_FCU_pub_cmd;
 	ros::Publisher ctrl_FCU_pub_land;
 	ros::Publisher debug_pub; // debug
 	ros::ServiceClient set_FCU_mode_srv;

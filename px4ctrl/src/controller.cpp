@@ -2,13 +2,6 @@
 #include <Eigen/Core>
 using namespace std;
 
-const double MIN_THRUST = 0.01;
-const double MAX_THRUST = 1.0;                 // 根据实际最大推力调整
-const double TAKEOFF_ALTITUDE_THRESHOLD = 0.3; // 起飞高度阈值，单位：米
-const double LANDING_ALTITUDE_THRESHOLD = 0.1; // 降落高度阈值，单位：米
-double takeoff_step = 0;
-double land_step = 0;
-
 int pos_vel_control_counter = 0; // 位置速度控制器的计数器
 const double dt = 0.02;          // 速度控制循环的时间间隔，50Hz
 double desire_v_x = 0;
@@ -61,29 +54,29 @@ void LinearControl::updateFlightState(const Desired_State_t &des, const Odom_Dat
   {
   case GROUND:
   {
-    takeoff_step = 0;
+    slow_start_step = 0;
     land_step = 0;
     if (state_count == 2 && !in_landing_ && des.p[2] > 0.2)
     {
-      flight_state = TAKING_OFF;
+      flight_state = SLOW_START;
     }
     break;
   }
-  case TAKING_OFF:
+  case SLOW_START:
   {
-    if (in_landing_)
-    {
-      flight_state = LANDING;
-    }
-    else if (odom.p[2] >= TAKEOFF_ALTITUDE_THRESHOLD && takeoff_step == 100)
+    if (slow_start_step == 100)
     {
       flight_state = FLYING;
+    }
+    else if (des.p[2] < -0.1)
+    {
+      flight_state = GROUND;
     }
     break;
   }
   case FLYING:
   {
-    if (in_landing_ || des.p[2] <= -0.1)
+    if (in_landing_ || (des.p[2] <= -0.1 && odom.p[2] <= LANDING_ALTITUDE_THRESHOLD && state_count == 2))
     {
       flight_state = LANDING;
     }
@@ -118,14 +111,14 @@ void LinearControl::calculateThrust(Controller_Output_t &u, const Eigen::Vector3
     velocity_controller_z.init();
     break;
 
-  case TAKING_OFF:
+  case SLOW_START:
     desired_thrust = computeDesiredCollectiveThrustSignal(des_acc);
     // 平滑增加推力
-    u.thrust = desired_thrust * takeoff_step * 0.01;
-    takeoff_step++;
-    if (takeoff_step > 100)
+    u.thrust = desired_thrust * slow_start_step * 0.01;
+    slow_start_step++;
+    if (slow_start_step > 100)
     {
-      takeoff_step = 100;
+      slow_start_step = 100;
     }
     else
     {
@@ -142,7 +135,14 @@ void LinearControl::calculateThrust(Controller_Output_t &u, const Eigen::Vector3
 
   case LANDING:
     // 平滑减小推力
-    u.thrust = last_thrust * 0.95;
+    if (land_step == 0) // 第一次进入降落状态时，记录悬停推力
+    {
+      u.thrust = computeDesiredCollectiveThrustSignal(param_.gra * Eigen::Vector3d(0, 0, 1));
+    }
+    else // 从悬停推力开始逐渐减小推力
+    {
+      u.thrust = last_thrust * 0.95;
+    }
     land_step++;
     if (u.thrust < MIN_THRUST)
       u.thrust = MIN_THRUST;
@@ -235,7 +235,8 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   // yaw = fromQuaternion2yaw(des.q);
   Eigen::Quaterniond q_des = Eigen::AngleAxisd(des.yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
   u.q = q_des; // MAP(ENU)->IMU(FLU) * IMU(FLU)->MOCAP(FLU) * MOCAP(FLU)->UAV_DES(FLU) = MAP(ENU)->UAV_DES(FLU)
-  if (flight_state == FLYING)
+  u.yaw = des.yaw;
+  if (flight_state == FLYING && state_count ==2)
   {
     timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), u.thrust));
   }

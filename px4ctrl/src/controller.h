@@ -71,7 +71,7 @@ public:
 
 	const double MIN_THRUST = 0.01;
 	const double MAX_THRUST = 0.95;				   // 根据实际最大推力调整
-	const double LANDING_ALTITUDE_THRESHOLD = 0.2; // 降落高度阈值，单位：米
+	const double LANDING_ALTITUDE_THRESHOLD = 0.15; // 降落高度阈值，单位：米
 	double slow_start_step = 0;
 	double land_step = 0;
 	LinearControl(Parameter_t &);

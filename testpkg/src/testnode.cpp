@@ -66,9 +66,9 @@ public:
         Position_after = Eigen::Vector3d::Zero();
 
         R_c2a = Eigen::Matrix3d::Identity();
-        R_i2c << -0.012299254251302336, -0.9997550667398611, -0.018399317184020714,
-            -0.9988718281685636, 0.011440175054767979, 0.046088971413001924,
-            -0.04586719128150388, 0.018945419570245543, -0.998767876856907;
+        R_i2c << -0.011132390353491266, -0.9999353526178143, 0.002315268905193985,
+            -0.9999251397378155, 0.011143975071921292, 0.005052399420578767,
+            -0.0050778740951467494, -0.00225885030098508, -0.9999845562757407;
         R_w2a = Eigen::Matrix3d::Identity();
         R_w2c = R_i2c;
 
@@ -113,7 +113,7 @@ public:
 
     void initializeCameraParameters()
     {
-        cam.initPersProjWithoutDistortion(537.9791181092193, 535.4888099676702, 427.0323350525588, 315.15525740107233);
+        cam.initPersProjWithoutDistortion(424.32664299938756, 427.0096583397845, 341.9183547019188, 250.7599639707058);
         if (!intrinsic_file.empty() && !camera_name.empty())
         {
             parser.parse(cam, intrinsic_file, camera_name, vpCameraParameters::perspectiveProjWithoutDistortion);
@@ -318,6 +318,9 @@ public:
                         Position_after(1) = pose_matrix[1][3];
                         Position_after(2) = pose_matrix[2][3];
                     }
+                    Position_after(0) -= 0.0008636750407922696;
+                    Position_after(1) -= 0.038734772386209135;
+                    Position_after(2) += 0.03292374441878657; // 将其转换到imu飞控所在位置
                     Position_after = R_w2c_temp * Position_after;
                     cout << "Position_after: " << Position_after.transpose() << endl;
                     Eigen::Quaterniond q(R_w2a);

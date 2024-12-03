@@ -75,15 +75,15 @@ void APO::function(bool loss_or_not_)
         predict_tag_x = tag_x_real;
         hat_tag_x(0) = tag_x_real;
         hat_tag_x(1) = 0;
-        filter_for_x.x_hat << tag_x_real, 0;
+        filter_for_x.x_hat << tag_x_real, 0, 0;
         predict_tag_y = tag_y_real;
         hat_tag_y(0) = tag_y_real;
         hat_tag_y(1) = 0;
-        filter_for_y.x_hat << tag_y_real, 0;
+        filter_for_y.x_hat << tag_y_real, 0, 0;
         predict_tag_z = tag_z_real;
         hat_tag_z(0) = tag_z_real;
         hat_tag_z(1) = 0;
-        filter_for_z.x_hat << tag_z_real, 0;
+        filter_for_z.x_hat << tag_z_real, 0, 0;
     }
     else
     {
@@ -94,16 +94,19 @@ void APO::function(bool loss_or_not_)
             hat_tag_x = A_bar * hat_tag_x + C_bar * predict_tag_x;
             Vector3d x_measure;
             x_measure << tag_x_real, hat_tag_x;
+            filter_for_x.predict();
             filter_for_x.updateJoint(x_measure);
             predict_tag_y = tag_y_real;
             hat_tag_y = A_bar * hat_tag_y + C_bar * predict_tag_y;
             Vector3d y_measure;
             y_measure << tag_y_real, hat_tag_y;
+            filter_for_y.predict();
             filter_for_y.updateJoint(y_measure);
             predict_tag_z = tag_z_real;
             hat_tag_z = A_bar * hat_tag_z + C_bar * predict_tag_z;
             Vector3d z_measure;
             z_measure << tag_z_real, hat_tag_z;
+            filter_for_z.predict();
             filter_for_z.updateJoint(z_measure);
         }
         else

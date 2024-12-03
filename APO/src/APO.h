@@ -16,7 +16,7 @@ class KalmanFilter
 public:
     double dt = 0.02;
     // 状态向量维度
-    static const int STATE_DIM = 2;
+    static const int STATE_DIM = 3;
     // 最大测量向量维度
     static const int MAX_MEAS_DIM = 3; // y1 + y2
 
@@ -36,34 +36,36 @@ public:
     Matrix<double, 3, 3> R_joint;
 
     // 状态估计和误差协方差矩阵
-    Vector2d x_hat;
+    Vector3d x_hat;
     Matrix<double, STATE_DIM, STATE_DIM> P;
 
     // 构造函数
     KalmanFilter()
     {
         // 初始化系统矩阵 A
-        A << 1, dt,
-            0, 1;
+        A << 1, dt, 0,
+            0, 1, dt,
+            0, 0, 1;
 
         // 初始化测量矩阵 H1 和 H2
-        H1 << 1, 0;
-        H2 << 1, 0,
-            0, 1;
+        H1 << 1, 0, 0;
+        H2 << 1, 0, 0,
+            0, 1, 0;
 
         // 初始化联合测量矩阵 H_joint
-        H_joint << 1, 0,
-            1, 0,
-            0, 1;
+        H_joint << 1, 0 , 0,
+            1, 0, 0,
+            0, 1, 0;
 
         // 初始化过程噪声协方差 Q（根据实际情况调整）
-        Q << 1e-4, 0,
-            0, 1e-2;
+        Q << 1e-4, 0, 0,
+            0, 1e-3, 0,
+            0, 0, 1e-2; 
 
         // 初始化测量噪声协方差 R1 和 R2（根据实际情况调整）
         R1 << 1e-4; // 慢测量位置噪声较小
-        R2 << 1e-2, 0,
-            0, 1e-1; // 快测量位置和速度噪声较大
+        R2 << 2e-4, 0,
+            0, 1e-3; // 快测量位置和速度噪声较大
 
         // 初始化联合测量噪声协方差矩阵 R_joint
         R_joint = Matrix<double, 3, 3>::Zero();
@@ -71,7 +73,7 @@ public:
         R_joint.block<2, 2>(1, 1) = R2; // y2的噪声
 
         // 初始化状态估计 x_hat（根据初始条件设定）
-        x_hat << 0, 0;
+        x_hat << 0, 0, 0;
 
         // 初始化误差协方差矩阵 P
         P = Matrix<double, STATE_DIM, STATE_DIM>::Identity();

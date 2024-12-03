@@ -32,6 +32,7 @@ private:
     // Matrices and vectors
     MatrixXd bigMatrix1;
     MatrixXd bigMatrix2;
+    MatrixXd bigMatrix3;
 
     SparseMatrix<double> P;
     VectorXd q;

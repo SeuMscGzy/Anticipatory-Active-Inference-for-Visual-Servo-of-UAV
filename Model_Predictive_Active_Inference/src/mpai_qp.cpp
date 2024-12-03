@@ -7,8 +7,8 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
       precice_w1(precice_w1), precice_w2(precice_w2), precice_z_u(precice_z_u), e1(e1),
       umin(umin), umax(umax)
 {
-    //cout << Np_ << Np_ << endl;
-    //cout << dt;
+    // cout << Np_ << Np_ << endl;
+    // cout << dt;
     bigMatrix1.resize(Np + 2 * (Np + 1), Np + 2 * (Np + 1));
     bigMatrix2.resize(1, Np + 2 * (Np + 1));
 
@@ -19,6 +19,157 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     MatrixXd Bd(2, 1);
     Bd << -0.5 * dt * dt,
         -dt;
+    MatrixXd K(2, 2);
+    K << 1, 0,
+        0, 0.1;
+    MatrixXd Closed_A = Ad - K;
+    VectorXd zr(2);
+    zr << 0, 0;
+    VectorXd kr = K * zr;
+
+    // Define kr_temp = ones(Np,1)
+    VectorXd kr_temp = VectorXd::Ones(Np);
+
+    // Compute kr = kron(kr_temp, kr)
+    VectorXd kr_full = kroneckerProduct(kr_temp, kr);
+
+    MatrixXd S_temp = MatrixXd::Zero(Np, Np + 1);
+    for (int i = 0; i < Np; ++i)
+    {
+        S_temp(i, i + 1) = 1;
+    }
+
+    // Define 2x2 identity matrix I2
+    MatrixXd I2 = MatrixXd::Identity(2, 2);
+
+    // Compute Kronecker product S = S_temp ⊗ I2
+    MatrixXd S = kroneckerProduct(S_temp, I2);
+
+    // Define Np x (Np + 1) matrix M_temp
+    MatrixXd M_temp = MatrixXd::Zero(Np, Np + 1);
+    for (int i = 0; i < Np; ++i)
+    {
+        M_temp(i, i) = 1;
+    }
+
+    // Compute Kronecker product M = M_temp ⊗ Closed_A
+    MatrixXd M = kroneckerProduct(M_temp, Closed_A);
+
+    // Define F matrix
+    MatrixXd F = MatrixXd::Identity(2, 2);
+    MatrixXd F_temp = Ad;
+    for (int i = 1; i <= Np; ++i)
+    {
+        // Append F_temp to F
+        F.conservativeResize(F.rows() + 2, F.cols());
+        F.block(F.rows() - 2, 0, 2, 2) = F_temp;
+        // Update F_temp
+        F_temp = F_temp * Ad;
+    }
+
+    MatrixXd Phi((Np + 1) * 2, Np);
+    Phi.setZero();
+    // 构建 Phi 矩阵
+    for (int i = 2; i <= Np + 1; ++i)
+    {
+        for (int j = 1; j < i; ++j)
+        {
+            int power = i - j - 1;
+
+            // 计算 A 的幂
+            MatrixXd A_power = MatrixXd::Identity(2, 2); // 初始化为单位矩阵
+            for (int p = 1; p <= power; ++p)
+            {
+                A_power *= Ad;
+            }
+
+            // 计算块
+            MatrixXd block = A_power * Bd;
+
+            // 确定在 Phi 中的位置
+            int row_start = (i - 1) * 2;
+            int col_start = (j - 1);
+
+            // 将块放入 Phi
+            Phi.block(row_start, col_start, 2, 1) = block;
+        }
+    }
+
+    // Compute T1 and T2
+    MatrixXd T11 = MatrixXd::Zero(2 * Np + 2, 2 * Np + 2);
+    for (int i = 0; i <= Np; ++i)
+    {
+        T11.block(2 * i, 2 * i, 2, 2) = MatrixXd::Identity(2, 2);
+    }
+    MatrixXd T1(Phi.rows(), Phi.cols() + T11.cols());
+    T1 << Phi, -T11;
+
+    MatrixXd T2_temp1 = MatrixXd::Zero(2 * (Np + 1), Np);
+    MatrixXd T2_temp2 = MatrixXd::Identity(2 * (Np + 1), 2 * (Np + 1));
+    MatrixXd T2(T2_temp1.rows(), T2_temp1.cols() + T2_temp2.cols());
+    T2 << T2_temp1, T2_temp2;
+
+    // Compute T3
+    MatrixXd T3_temp1 = MatrixXd::Identity(Np, Np);
+    MatrixXd T3_temp2 = MatrixXd::Zero(Np, 2 * (Np + 1));
+    MatrixXd T3(T3_temp1.rows(), T3_temp1.cols() + T3_temp2.cols());
+    T3 << T3_temp1, T3_temp2;
+
+    // Compute BigB
+    MatrixXd BigB = kroneckerProduct(MatrixXd::Identity(Np, Np), Bd);
+
+    MatrixXd R = MatrixXd::Zero(2, 2);
+    R(0, 0) = precice_z1;
+    R(1, 1) = precice_z2;
+    MatrixXd C = MatrixXd::Identity(2, 2);
+    R = C.transpose() * R * C;
+
+    MatrixXd bigR = MatrixXd::Zero(2 * (Np + 1), 2 * (Np + 1));
+    for (int i = 0; i <= Np; ++i)
+    {
+        bigR.block(2 * i, 2 * i, 2, 2) = R;
+    }
+
+    MatrixXd Q = MatrixXd::Zero(2, 2);
+    Q(0, 0) = precice_w1;
+    Q(1, 1) = precice_w2;
+
+    MatrixXd bigQ = MatrixXd::Zero(2 * Np, 2 * Np);
+    for (int i = 0; i < Np; ++i)
+    {
+        bigQ.block(2 * i, 2 * i, 2, 2) = Q;
+    }
+
+    MatrixXd S_M = S - M;
+
+    // Compute T4 = S_M * T2 - BigB * T3
+    MatrixXd T4 = S_M * T2 - BigB * T3;
+
+    // Compute bigMatrix1 = T1' * bigR * T1 + T4' * bigQ * T4
+    bigMatrix1 = T1.transpose() * bigR * T1 + T4.transpose() * bigQ * T4;
+
+    // Define M13 = zeros(Np + 2 * (Np + 1), Np + 2 * (Np + 1))
+    MatrixXd M13 = MatrixXd::Zero(Np + 2 * (Np + 1), Np + 2 * (Np + 1));
+
+    // Set M13(0:Np - 1, 0:Np - 1) = Identity matrix
+    M13.block(0, 0, Np, Np) = MatrixXd::Identity(Np, Np);
+
+    // Update bigMatrix1 = bigMatrix1 + M13 * precice_z_u
+    bigMatrix1 += M13 * precice_z_u;
+    /*// Compute eigenvalues of bigMatrix1
+    SelfAdjointEigenSolver<MatrixXd> eigensolver(bigMatrix1);
+    if (eigensolver.info() != Success)
+    {
+        std::cerr << "Eigenvalue computation did not converge." << std::endl;
+    }
+    VectorXd eigenvalues = eigensolver.eigenvalues();*/
+
+    bigMatrix2 = F.transpose() * bigR * T1;
+
+    // Compute bigMatrix3 = -kr' * bigQ * T4
+    MatrixXd bigMatrix3 = -kr_full.transpose() * bigQ * T4;
+    cout << bigMatrix3 << endl;
+    /*
     // 构建矩阵 M1 到 M4
     MatrixXd M1(1, 4);
     M1 << 0, 0, e1, 1;
@@ -123,7 +274,8 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     }
     MatrixXd bigMatrix2_ = F.transpose() * bigR * T1;
     // cout << bigMatrix2_ << endl;
-    bigMatrix2 = bigMatrix2_;
+    bigMatrix2 = bigMatrix2_;*/
+
     // Initialize the solver matrices
     initsolver();
     cout << "Optimizer initialized" << endl;
@@ -157,7 +309,7 @@ vector<double> Optimizer::optimize(double x1_init_, double x2_init_, double mu_i
 {
     RowVectorXd rowVec(2);
     rowVec << x1_init_, x2_init_;
-    q = rowVec * bigMatrix2;
+    q = rowVec * bigMatrix2 + bigMatrix3;
     // cout << q << endl;
     l[Np] = mu_init_ - 0.1;
     u[Np] = mu_init_ + 0.1;
@@ -219,12 +371,12 @@ void Optimizer::initsolver()
     solver.settings()->setVerbosity(false);
     P = bigMatrix1.sparseView();
     // cout << P << endl;
-    Eigen::VectorXd q1(Np + 2 * (Np + 1));
+    VectorXd q1(Np + 2 * (Np + 1));
     q = q1;
 
-    Eigen::SparseMatrix<double> A1(Np + 2, Np + 2 * (Np + 1));
+    SparseMatrix<double> A1(Np + 2, Np + 2 * (Np + 1));
     // 创建一个容器来存储非零元素
-    std::vector<Eigen::Triplet<double>> triplets;
+    std::vector<Triplet<double>> triplets;
 
     // 构造 A 矩阵
     for (int i = 0; i < Np + 2; ++i)
@@ -235,7 +387,7 @@ void Optimizer::initsolver()
     // 将非零元素添加到 A 矩阵
     A1.setFromTriplets(triplets.begin(), triplets.end());
     A = A1;
-    Eigen::VectorXd l1(Np + 2), u1(Np + 2);
+    VectorXd l1(Np + 2), u1(Np + 2);
     l = l1;
     u = u1;
     // 设置上下界

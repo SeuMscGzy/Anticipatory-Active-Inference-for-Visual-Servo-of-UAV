@@ -15,15 +15,15 @@ class RAID_AgiVS
 public:
     // parameters and variables for the optimization problem
     double dt = 0.02;
-    int Np = 50;
-    double precice_z1 = 5;
+    int Np = 2;
+    double precice_z1 = 2;
     double precice_z2 = 1;
-    double precice_w1 = 2;
-    double precice_w2 = 2;
+    double precice_w1 = 1;
+    double precice_w2 = 1;
     double e1 = 2;
-    double precice_z_u = 0.005;
-    double umin = -4;
-    double umax = 4;
+    double precice_z_u = 0.001;
+    double umin = -5;
+    double umax = 5;
     Optimizer optimizer_x;
     Optimizer optimizer_y;
     Optimizer optimizer_z;

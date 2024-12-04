@@ -20,6 +20,7 @@ roslaunch usb_cam usb_cam-test.launch & sleep 1;
 roslaunch mavros px4.launch gcs_url:=udp://@10.193.119.163 & sleep 3;
 rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0 & sleep 1;
 rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0 & sleep 1;
+rosrun mavros mavcmd long 511 32 10000 0 0 0 0 0 & sleep 1;
 
 #将视觉定位发送给px4飞控
 #rosrun topic_tools relay /vrpn_client_node/MCServer/5/pose /mavros/vision_pose/pose & sleep 2;

@@ -55,6 +55,12 @@ void APO::Odom_Callback(const nav_msgs::Odometry::ConstPtr &msg)
     uav_vx = msg->twist.twist.linear.x;
     uav_vy = msg->twist.twist.linear.y;
     uav_vz = msg->twist.twist.linear.z;
+    uav_x = 0;
+    uav_y = 0;
+    uav_z = 0;
+    uav_vx = 0;
+    uav_vy = 0;
+    uav_vz = 0;
 }
 
 void APO::function(bool loss_or_not_)

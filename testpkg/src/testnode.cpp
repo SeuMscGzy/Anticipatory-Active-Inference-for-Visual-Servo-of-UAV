@@ -102,6 +102,43 @@ public:
         ros::waitForShutdown();
     }
 
+    void faultProcess(chrono::time_point<high_resolution_clock> &image_timestamp_getimg_)
+    {
+        desired_yaw = 0;
+        lost_target = true;
+        processing = false;
+        auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
+        if (delay.count() > 0)
+        {
+            this_thread::sleep_for(delay);
+        }
+        else
+        {
+            count_for_overtime += 1;
+        }
+        publishDetectionResult(image_timestamp_getimg_);
+        auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
+        cout << delay2.count() << endl;
+    }
+
+    void normalProcess(chrono::time_point<high_resolution_clock> &image_timestamp_getimg_)
+    {
+        auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
+        if (delay.count() > 0)
+        {
+            this_thread::sleep_for(delay);
+        }
+        else
+        {
+            count_for_overtime += 1;
+        }
+        publishDetectionResult(image_timestamp_getimg_);
+        processing = false;
+        auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
+        cout << "image delay: " << delay2.count() << endl;
+        cout << "viration times: " << count_for_overtime << endl;
+    }
+
     void setupDetector()
     {
         detector_.setAprilTagQuadDecimate(quad_decimate);
@@ -140,8 +177,9 @@ public:
 
     thread worker_thread;
 
-    bool stop_thread;
-    bool processing;
+    std::atomic<bool> stop_thread;
+    std::atomic<bool> processing;
+    std::mutex data_mutex; // 用于保护共享数据 R_w2c
 
     int opt_device;
     vpDetectorAprilTag::vpPoseEstimationMethod poseEstimationMethod;
@@ -197,7 +235,11 @@ public:
             msg->pose.pose.orientation.x,
             msg->pose.pose.orientation.y,
             msg->pose.pose.orientation.z);
-        R_w2c = q1.toRotationMatrix() * R_i2c; // 世界系到相机系
+        Eigen::Matrix3d R_w2c_temp = q1.toRotationMatrix() * R_i2c;
+        {
+            std::lock_guard<std::mutex> lock(data_mutex); // 加锁
+            R_w2c = R_w2c_temp;                           // 保护对 R_w2c 的写操作
+        } // 超出作用域后自动解锁
     }
 
     void processImages()
@@ -207,34 +249,30 @@ public:
             if (processing)
             {
                 cv::Mat distorted_image;
-                Eigen::Matrix3d R_w2c_temp = R_w2c;
+                Eigen::Matrix3d R_w2c_temp;
+                {
+                    std::lock_guard<std::mutex> lock(data_mutex); // 加锁
+                    R_w2c_temp = R_w2c;                           // 保护对 R_w2c 的读操作
+                } // 超出作用域后自动解锁
                 chrono::time_point<high_resolution_clock> image_timestamp_getimg = high_resolution_clock::now();
                 try
                 {
                     camera_cap.captureImage(distorted_image);
+                    if (distorted_image.empty())
+                    {
+                        ROS_ERROR("Captured image is empty.");
+                        faultProcess(image_timestamp_getimg);
+                        continue;
+                    }
                     cv::cvtColor(distorted_image, distorted_image, cv::COLOR_BGR2GRAY);
                     vpImageConvert::convert(distorted_image, I);
                     // chrono::time_point<high_resolution_clock> image_timestamp_getimg_over = high_resolution_clock::now();
                     // cout << "image get time: " << duration_cast<microseconds>(image_timestamp_getimg_over - image_timestamp_getimg).count() << endl;
                 }
-                catch (cv_bridge::Exception &e)
+                catch (...)
                 {
-                    ROS_ERROR("cv_bridge exception: %s", e.what());
-                    desired_yaw = 0;
-                    lost_target = true;
-                    processing = false;
-                    auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
-                    if (delay.count() > 0)
-                    {
-                        this_thread::sleep_for(delay);
-                    }
-                    else
-                    {
-                        count_for_overtime += 1;
-                    }
-                    publishDetectionResult(image_timestamp_getimg);
-                    auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
-                    cout << delay2.count() << endl;
+                    ROS_ERROR("Unknown exception during image capture or conversion.");
+                    faultProcess(image_timestamp_getimg);
                     continue;
                 }
 
@@ -250,38 +288,32 @@ public:
 
                 detector_.detect(I);
                 vector<int> ids = detector_.getTagsId();
+                // 检测是否丢失目标
                 if (ids.size() == 0)
                 {
                     desired_yaw = 0;
                     lost_target = true;
-                    cout << "lost!!!!!!" << endl;
+                    cout << "lost target!!!!!!" << endl;
                 }
                 else
                 {
+                    bool valid_id = true;
                     for (const auto &id : ids)
                     {
                         if (id != 0 && id != 1)
                         {
                             cout << "wrong detection!!!!!!" << endl;
-                            desired_yaw = 0;
-                            lost_target = true;
-                            processing = false;
-                            auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
-                            if (delay.count() > 0)
-                            {
-                                this_thread::sleep_for(delay);
-                            }
-                            else
-                            {
-                                count_for_overtime += 1;
-                            }
-                            publishDetectionResult(image_timestamp_getimg);
-                            auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
-                            cout << delay2.count() << endl;
-                            continue;
+                            valid_id = false;
+                            break;
                         }
                     }
+                    if (!valid_id)
+                    {
+                        faultProcess(image_timestamp_getimg);
+                        continue;
+                    }
                     lost_target = false;
+                    bool pose_found = false;
                     for (size_t i = 0; i < ids.size(); i++)
                     {
                         int id = ids[i];
@@ -293,58 +325,59 @@ public:
                         {
                             double tagSize = tagSizes[id];
                             vpHomogeneousMatrix cMo;
-                            detector_.getPose(i, tagSize, cam, cMo);
-                            cMo_vec.push_back(cMo);
-                            break;
+                            try
+                            {
+                                detector_.getPose(i, tagSize, cam, cMo);
+                                cMo_vec.push_back(cMo);
+                                pose_found = true;
+                                break;
+                            }
+                            catch (const std::exception &e)
+                            {
+                                cout << "Error in getPose: " << e.what() << endl;
+                                continue;
+                            }
                         }
                     }
-                    pose_matrix = cMo_vec[0];
-                    vpRotationMatrix R_c2a_vp;
-                    pose_matrix.extract(R_c2a_vp);
-                    Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R_c2a_map(R_c2a.data());
-                    R_c2a_map = Eigen::Matrix3d::Map(&R_c2a_vp[0][0]);
-                    R_w2a = R_w2c_temp * R_c2a;
-                    if (ids.size() == 2 || ids[0] == 1)
+                    if (!pose_found || cMo_vec.empty())
                     {
-                        Eigen::Vector3d t(0, -0.0584, 0);
-                        t = R_w2c_temp * t;
-                        Position_after(0) = pose_matrix[0][3] - t[0];
-                        Position_after(1) = pose_matrix[1][3] - t[1];
-                        Position_after(2) = pose_matrix[2][3] - t[2];
+                        faultProcess(image_timestamp_getimg);
+                        continue;
                     }
                     else
                     {
-                        Position_after(0) = pose_matrix[0][3];
-                        Position_after(1) = pose_matrix[1][3];
-                        Position_after(2) = pose_matrix[2][3];
+                        pose_matrix = cMo_vec[0];
+                        vpRotationMatrix R_c2a_vp;
+                        pose_matrix.extract(R_c2a_vp);
+                        Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R_c2a_map(R_c2a.data());
+                        R_c2a_map = Eigen::Matrix3d::Map(&R_c2a_vp[0][0]);
+                        R_w2a = R_w2c_temp * R_c2a;
+                        if (ids.size() == 2 || ids[0] == 1)
+                        {
+                            Eigen::Vector3d t(0, -0.0584, 0);
+                            t = R_w2c_temp * t;
+                            Position_after(0) = pose_matrix[0][3] - t[0];
+                            Position_after(1) = pose_matrix[1][3] - t[1];
+                            Position_after(2) = pose_matrix[2][3] - t[2];
+                        }
+                        else
+                        {
+                            Position_after(0) = pose_matrix[0][3];
+                            Position_after(1) = pose_matrix[1][3];
+                            Position_after(2) = pose_matrix[2][3];
+                        }
+                        Position_after(0) -= 0.0008636750407922696;
+                        Position_after(1) -= 0.038734772386209135;
+                        Position_after(2) += 0.03292374441878657; // 将其转换到imu飞控所在位置
+                        Position_after = R_w2c_temp * Position_after;
+                        cout << "Position_after: " << Position_after.transpose() << endl;
+                        Eigen::Quaterniond q(R_w2a);
+                        double yaw = fromQuaternion2yaw(q);
+                        yaw = yaw + M_PI / 2;
+                        desired_yaw = yaw;
                     }
-                    Position_after(0) -= 0.0008636750407922696;
-                    Position_after(1) -= 0.038734772386209135;
-                    Position_after(2) += 0.03292374441878657; // 将其转换到imu飞控所在位置
-                    Position_after = R_w2c_temp * Position_after;
-                    cout << "Position_after: " << Position_after.transpose() << endl;
-                    Eigen::Quaterniond q(R_w2a);
-                    double yaw = fromQuaternion2yaw(q);
-                    yaw = yaw + M_PI / 2;
-                    desired_yaw = yaw;
                 }
-
-                // chrono::time_point<high_resolution_clock> image_timestamp_temp3 = high_resolution_clock::now();
-                //  cout << "image processing time: " << duration_cast<microseconds>(image_timestamp_temp3 - image_timestamp_temp2).count() << endl;
-                auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
-                if (delay.count() > 0)
-                {
-                    this_thread::sleep_for(delay);
-                }
-                else
-                {
-                    count_for_overtime += 1;
-                }
-                publishDetectionResult(image_timestamp_getimg);
-                processing = false;
-                auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg);
-                cout << "image delay: " << delay2.count() << endl;
-                cout << "viration times: " << count_for_overtime << endl;
+                normalProcess(image_timestamp_getimg);
             }
             // 让线程稍作休息，避免空转
             this_thread::sleep_for(microseconds(1000)); // 休眠 1 毫秒

@@ -58,9 +58,9 @@ public:
             0, 1, 0;
 
         // 初始化过程噪声协方差 Q（根据实际情况调整）
-        Q << 1. / 20. * pow(dt, 5), 1./8.*pow(dt,4), 1./6. *pow(dt,3),
-            1./8.*pow(dt,4), 1./3.*pow(dt,3), 1./2.*pow(dt,2), 
-            1./6. *pow(dt,3), 1./2.*pow(dt,2), dt;
+        Q << 1. / 20. * pow(dt, 5), 1. / 8. * pow(dt, 4), 1. / 6. * pow(dt, 3),
+            1. / 8. * pow(dt, 4), 1. / 3. * pow(dt, 3), 1. / 2. * pow(dt, 2),
+            1. / 6. * pow(dt, 3), 1. / 2. * pow(dt, 2), dt;
         Q = 400 * Q;
 
         // 初始化测量噪声协方差 R1 和 R2（根据实际情况调整）
@@ -92,8 +92,18 @@ public:
     void updateJoint(const Vector3d &y_joint)
     {
         // 计算卡尔曼增益
-        Matrix<double, STATE_DIM, 3> K = P * H_joint.transpose() *
-                                         (H_joint * P * H_joint.transpose() + R_joint).inverse();
+        // 计算 S = H * P * H^T + R
+        Eigen::Matrix3d S = H_joint * P * H_joint.transpose() + R_joint;
+        // S 矩阵的分解对象（使用 LDLT 分解）
+        Eigen::LDLT<Eigen::Matrix3d> S_decomposition;
+        // 更新分解对象
+        S_decomposition.compute(S);
+        if (S_decomposition.info() != Eigen::Success)
+        {
+            throw std::runtime_error("S 矩阵的分解失败！");
+        }
+        // 计算卡尔曼增益 K = P * H^T * S^{-1}
+        Eigen::Matrix<double, STATE_DIM, 3> K = P * H_joint.transpose() * S_decomposition.solve(Eigen::Matrix3d::Identity());
         // 更新状态估计
         x_hat = x_hat + K * (y_joint - H_joint * x_hat);
         // 更新误差协方差矩阵
@@ -104,8 +114,17 @@ public:
     void updateH2(const Vector2d &y2)
     {
         // 计算卡尔曼增益
-        Matrix<double, STATE_DIM, 2> K = P * H2.transpose() *
-                                         (H2 * P * H2.transpose() + R2).inverse();
+        // 计算 S = H * P * H^T + R
+        Eigen::Matrix2d S = H2 * P * H2.transpose() + R2;
+        // S 矩阵的分解对象（使用 LDLT 分解）
+        Eigen::LDLT<Eigen::Matrix2d> S_decomposition;
+        // 更新分解对象
+        S_decomposition.compute(S);
+        if (S_decomposition.info() != Eigen::Success)
+        {
+            throw std::runtime_error("S 矩阵的分解失败！");
+        }
+        Matrix<double, STATE_DIM, 2> K = P * H2.transpose() * S_decomposition.solve(Eigen::Matrix2d::Identity());
         // 更新状态估计
         x_hat = x_hat + K * (y2 - H2 * x_hat);
         // 更新误差协方差矩阵

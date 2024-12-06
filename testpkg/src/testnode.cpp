@@ -192,8 +192,8 @@ public:
 
     std::atomic<bool> stop_thread;
     std::atomic<bool> processing;
-    std::mutex data_mutex; // 用于保护共享数据 R_w2c
 
+    std::mutex data_mutex; // 用于保护共享数据 R_w2c
     // 新增成员变量
     std::condition_variable cv;
     std::mutex cv_mutex;

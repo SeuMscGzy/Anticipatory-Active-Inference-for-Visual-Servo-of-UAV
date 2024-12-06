@@ -154,7 +154,7 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     // Set M13(0:Np - 1, 0:Np - 1) = Identity matrix
     M13.block(0, 0, Np, Np) = MatrixXd::Identity(Np, Np);
 
-    // Update bigMatrix1 = bigMatrix1 + M13 * precice_z_u
+    // Update bigMatrix1
     bigMatrix1 += M13 * precice_z_u;
     /*// Compute eigenvalues of bigMatrix1
     SelfAdjointEigenSolver<MatrixXd> eigensolver(bigMatrix1);

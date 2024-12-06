@@ -99,8 +99,9 @@ public:
 
     void start()
     {
-        ros::AsyncSpinner spinner(2); // 使用2个线程
-        spinner.start();
+        /*ros::AsyncSpinner spinner(2); // 使用2个线程
+        spinner.start();*/
+        ros::spin(); // 使用单线程
         ros::waitForShutdown();
     }
 

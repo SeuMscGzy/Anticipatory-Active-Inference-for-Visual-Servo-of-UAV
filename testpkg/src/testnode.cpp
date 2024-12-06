@@ -57,7 +57,7 @@ public:
         opt_device = 0;
         poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY;
         quad_decimate = 1.0;
-        nThreads = 4;
+        nThreads = 1;
         display_tag = false;
         color_id = -1;
         thickness = 2;
@@ -143,6 +143,7 @@ public:
         auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
         cout << "image delay: " << delay2.count() << endl;
         cout << "viration times: " << count_for_overtime << endl;
+        cout << desired_yaw << endl;
         // 图像处理完成后，设置processing为false
         {
             std::lock_guard<std::mutex> lock(cv_mutex);
@@ -391,6 +392,7 @@ public:
                     Position_after(2) += 0.03292374441878657; // 将其转换到imu飞控所在位置
                     Position_after = R_w2c_temp * Position_after;
                     cout << "Position_after: " << Position_after.transpose() << endl;
+                    R_w2a = R_w2c_temp * R_c2a;
                     Eigen::Quaterniond q(R_w2a);
                     double yaw = fromQuaternion2yaw(q);
                     yaw = yaw + M_PI / 2;

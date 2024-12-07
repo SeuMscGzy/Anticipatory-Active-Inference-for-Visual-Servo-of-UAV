@@ -188,7 +188,7 @@ void PX4CtrlFSM::process()
 	debug_msg = controller.calculateControl(des, odom_data, imu_data, u, static_cast<int>(state), in_landing);
 	debug_msg.header.stamp = now_time;
 	debug_pub.publish(debug_msg);
-	if (in_landing)
+	if (in_landing || controller.flight_state == LinearControl::FlightState::LANDING)
 	{
 		u.q = imu_data.q;
 	}

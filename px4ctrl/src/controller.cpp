@@ -32,7 +32,7 @@ public:
       integral_error = 1 * integral_error / abs(integral_error);
     }
     double u_pid = Kp * error + Ki * integral_error;
-    if (abs(u_pid > 2))
+    if (abs(u_pid) > 2)
     {
       u_pid = 2 * u_pid / abs(u_pid);
     }
@@ -58,6 +58,7 @@ void LinearControl::updateFlightState(const Desired_State_t &des, const Odom_Dat
     land_step = 0;
     if (state_count == 2 && !in_landing_ && des.p[2] > 0.2)
     {
+      ROS_INFO("Slow speed up and ready to Takeoff!");
       flight_state = SLOW_START;
     }
     break;
@@ -66,10 +67,20 @@ void LinearControl::updateFlightState(const Desired_State_t &des, const Odom_Dat
   {
     if (slow_start_step == 100)
     {
-      flight_state = FLYING;
+      if (odom.p[2] > GROUND_ALTITUDE_THRESHOLD)
+      {
+        ROS_INFO("Takeoff completed, already in the air!");
+        flight_state = FLYING;
+      }
+      else
+      {
+        ROS_INFO("Takeoff failed, the thrust parameter should be further optimized!");
+        flight_state = GROUND;
+      }
     }
-    else if (des.p[2] < -0.1)
+    else if (des.p[2] < -0.1 && odom.p[2] < GROUND_ALTITUDE_THRESHOLD && state_count == 2)
     {
+      ROS_INFO("Takeoff canceled!");
       flight_state = GROUND;
     }
     break;
@@ -78,14 +89,16 @@ void LinearControl::updateFlightState(const Desired_State_t &des, const Odom_Dat
   {
     if (in_landing_ || (des.p[2] <= -0.1 && odom.p[2] <= LANDING_ALTITUDE_THRESHOLD && state_count == 2))
     {
+      ROS_INFO("Start Landing!");
       flight_state = LANDING;
     }
     break;
   }
   case LANDING:
   {
-    if (odom.p[2] <= LANDING_ALTITUDE_THRESHOLD && land_step == 100)
+    if (odom.p[2] <= GROUND_ALTITUDE_THRESHOLD && land_step == 100)
     {
+      ROS_INFO("Landing completed, already on the ground!");
       flight_state = GROUND;
     }
     break;
@@ -210,10 +223,10 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
       desire_v_x = position_controller_gain_horizontal * (des.p[0] - odom.p[0]);
       desire_v_y = position_controller_gain_horizontal * (des.p[1] - odom.p[1]);
       desire_v_z = position_controller_gain_vertical * (des.p[2] - odom.p[2]);
-      pos_vel_control_counter = 0;
       des_acc[0] = velocity_controller_x.update(desire_v_x - odom.v[0]);
       des_acc[1] = velocity_controller_y.update(desire_v_y - odom.v[1]);
       des_acc[2] = velocity_controller_z.update(desire_v_z - odom.v[2]);
+      pos_vel_control_counter = 0;
     }
     else
     {

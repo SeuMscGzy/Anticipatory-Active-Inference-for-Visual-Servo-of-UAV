@@ -6,10 +6,6 @@ int main(int argc, char **argv)
     ros::NodeHandle nh("~");
     RAID_AgiVS controller(nh);
     // Start the spinner in the main thread
-    ros::AsyncSpinner spinner(3);
-    spinner.start();
-
-    // Keep the main thread alive to process callbacks and signals
-    ros::waitForShutdown();
+    ros::spin();
     return 0;
 }

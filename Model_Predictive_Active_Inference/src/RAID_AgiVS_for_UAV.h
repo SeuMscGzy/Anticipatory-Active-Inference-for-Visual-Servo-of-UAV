@@ -41,11 +41,11 @@ public:
     std::atomic<double> u_x;
     std::atomic<double> u_y;
     std::atomic<double> u_z;
-    double des_yaw;
+    std::atomic<double> des_yaw;
     quadrotor_msgs::PositionCommand acc_msg;
 
     // variables for control logic
-    int px4_state;
+    std::atomic<int> px4_state;
     bool land_or_just_tracking = false;
     bool keep_in_land = false;
 

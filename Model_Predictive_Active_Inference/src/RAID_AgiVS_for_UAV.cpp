@@ -3,7 +3,7 @@
 // 构造函数
 RAID_AgiVS::RAID_AgiVS(ros::NodeHandle &nh)
     : nh(nh),
-      px4_state(1),
+      px4_state(3),
       x_real(0.0),
       xv_real(0.0),
       y_real(0.0),
@@ -45,7 +45,7 @@ void RAID_AgiVS::startControlLoops()
 {
     x_thread = std::thread(&RAID_AgiVS::xAxisControlLoop, this);
     y_thread = std::thread(&RAID_AgiVS::yAxisControlLoop, this);
-    z_thread = std::thread(&RAID_AgiVS::zAxisControlLoop, this);
+    //z_thread = std::thread(&RAID_AgiVS::zAxisControlLoop, this);
     u_pub_thread = std::thread(&RAID_AgiVS::uPubLoop, this);
 }
 
@@ -54,15 +54,11 @@ void RAID_AgiVS::xAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
+        cout << ros::ok() << endl;
         if (px4_state == 3)
         {
             auto start_time = std::chrono::high_resolution_clock::now();
-            double mux = optical_x[1];
-            cout << "mux: " << mux << endl;
-            double mux_p = optical_x[2];
-            double x = x_real;
-            double xv = xv_real;
-            optical_x = optimizer_x.optimize(x, xv, mux, mux_p);
+            //optical_x = optimizer_x.optimize(x_real, xv_real, optical_x[1], optical_x[2]);
             u_x = optical_x[0];
             auto end_time = std::chrono::high_resolution_clock::now();
             double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
@@ -85,11 +81,7 @@ void RAID_AgiVS::yAxisControlLoop()
         if (px4_state == 3)
         {
             auto start_time = std::chrono::high_resolution_clock::now();
-            double muy = optical_y[1];
-            double muy_p = optical_y[2];
-            double y = y_real;
-            double yv = yv_real;
-            optical_y = optimizer_y.optimize(y, yv, muy, muy_p);
+            //optical_y = optimizer_y.optimize(y_real, yv_real, optical_y[1], optical_y[2]);
             u_y = optical_y[0];
             auto end_time = std::chrono::high_resolution_clock::now();
             double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
@@ -112,11 +104,7 @@ void RAID_AgiVS::zAxisControlLoop()
         if (px4_state == 3)
         {
             auto start_time = std::chrono::high_resolution_clock::now();
-            double muz = optical_z[1];
-            double muz_p = optical_z[2];
-            double z = z_real;
-            double zv = zv_real;
-            optical_z = optimizer_z.optimize(z, zv, muz, muz_p);
+            //optical_z = optimizer_z.optimize(z_real, zv_real, optical_z[1], optical_z[2]);
             u_z = optical_z[0];
             auto end_time = std::chrono::high_resolution_clock::now();
             double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();

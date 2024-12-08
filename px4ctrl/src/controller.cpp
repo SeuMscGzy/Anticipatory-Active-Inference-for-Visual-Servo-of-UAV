@@ -67,15 +67,23 @@ void LinearControl::updateFlightState(const Desired_State_t &des, const Odom_Dat
   {
     if (slow_start_step == 100)
     {
-      if (odom.p[2] > GROUND_ALTITUDE_THRESHOLD)
+      if (odom.p[2] > GROUND_ALTITUDE_THRESHOLD && state_count == 2)
       {
         ROS_INFO("Takeoff completed, already in the air!");
         flight_state = FLYING;
       }
       else
       {
-        ROS_INFO("Takeoff failed, the thrust parameter should be further optimized!");
-        flight_state = GROUND;
+        if (state_count == 1)
+        {
+          ROS_INFO("Takeoff failed due to the manual control, please switch to L2 Auto Hover mode!");
+          flight_state = GROUND;
+        }
+        else
+        {
+          ROS_INFO("Takeoff failed, the thrust parameter should be further optimized!");
+          flight_state = GROUND;
+        }
       }
     }
     else if (des.p[2] < -0.1 && odom.p[2] < GROUND_ALTITUDE_THRESHOLD && state_count == 2)

@@ -6,6 +6,7 @@
 #include <vector>
 #include <OsqpEigen/OsqpEigen.h>
 #include <eigen3/unsupported/Eigen/KroneckerProduct>
+#include <cmath>
 using namespace std;
 using namespace Eigen;
 class Optimizer
@@ -15,7 +16,7 @@ public:
               double precice_w1, double precice_w2, double precice_z_u, double e1,
               double umin, double umax);
 
-    vector<double> optimize(double x1_init_, double x2_init_, double mu_init_, double mu_p_init_);
+    vector<double> optimize(Eigen::Vector3d x, Eigen::Vector3d vx, Eigen::Vector3d mu_init_, Eigen::Vector3d mu_p_init_);
     void shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolution);
 
     OsqpEigen::Solver solver;

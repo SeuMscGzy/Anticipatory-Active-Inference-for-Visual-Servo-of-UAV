@@ -3,7 +3,7 @@
 // 构造函数
 RAID_AgiVS::RAID_AgiVS(ros::NodeHandle &nh)
     : nh(nh),
-      px4_state(3),
+      px4_state(1),
       x_real(0.0),
       xv_real(0.0),
       y_real(0.0),
@@ -54,7 +54,7 @@ void RAID_AgiVS::xAxisControlLoop()
     ros::Rate rate(50);
     while (ros::ok())
     {
-        cout << ros::ok() << endl;
+        //cout << ros::ok() << endl;
         if (px4_state == 3)
         {
             auto start_time = std::chrono::high_resolution_clock::now();

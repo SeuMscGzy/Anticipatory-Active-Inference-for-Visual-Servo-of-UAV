@@ -3,20 +3,15 @@
 // 构造函数
 RAID_AgiVS::RAID_AgiVS(ros::NodeHandle &nh)
     : nh(nh),
-      px4_state(1),
+      px4_state(3),
       x_real(0.0),
       xv_real(0.0),
       y_real(0.0),
       yv_real(0.0),
       z_real(0.0),
       zv_real(0.0),
-      u_x(0.0),
-      u_y(0.0),
-      u_z(0.0),
       des_yaw(0.0),
-      optimizer_x(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, precice_z_u, e1, umin, umax),
-      optimizer_y(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, precice_z_u, e1, umin, umax),
-      optimizer_z(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, precice_z_u, e1, umin, umax)
+      optimizer_xyz(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, precice_z_u, e1, umin, umax)
 {
     acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
     pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
@@ -31,116 +26,69 @@ RAID_AgiVS::RAID_AgiVS(ros::NodeHandle &nh)
 RAID_AgiVS::~RAID_AgiVS()
 {
     // 确保控制线程安全退出
-    if (x_thread.joinable())
-        x_thread.join();
-    if (y_thread.joinable())
-        y_thread.join();
-    if (z_thread.joinable())
-        z_thread.join();
-    if (u_pub_thread.joinable())
-        u_pub_thread.join();
+    if (xyz_thread.joinable())
+        xyz_thread.join();
 }
 
 void RAID_AgiVS::startControlLoops()
 {
-    x_thread = std::thread(&RAID_AgiVS::xAxisControlLoop, this);
-    y_thread = std::thread(&RAID_AgiVS::yAxisControlLoop, this);
-    //z_thread = std::thread(&RAID_AgiVS::zAxisControlLoop, this);
-    u_pub_thread = std::thread(&RAID_AgiVS::uPubLoop, this);
+    xyz_thread = std::thread(&RAID_AgiVS::xyzAxisControlLoop, this);
 }
 
-void RAID_AgiVS::xAxisControlLoop()
+void RAID_AgiVS::xyzAxisControlLoop()
 {
     ros::Rate rate(50);
     while (ros::ok())
     {
-        //cout << ros::ok() << endl;
         if (px4_state == 3)
         {
             auto start_time = std::chrono::high_resolution_clock::now();
-            //optical_x = optimizer_x.optimize(x_real, xv_real, optical_x[1], optical_x[2]);
-            u_x = optical_x[0];
+            Vector3d xyz_real(x_real, y_real, z_real);
+            Vector3d xyz_v_real(xv_real, yv_real, zv_real);
+            Vector3d optical_mu(optical_xyz[3], optical_xyz[4], optical_xyz[5]);
+            Vector3d optical_mu_p(optical_xyz[6], optical_xyz[7], optical_xyz[8]);
+            optical_xyz = optimizer_xyz.optimize(xyz_real, xyz_v_real, optical_mu, optical_mu_p);
             auto end_time = std::chrono::high_resolution_clock::now();
             double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
             ROS_INFO("Execution time x: %f seconds", elapsed_time);
+            acc_msg.position.x = 0;
+            acc_msg.position.y = 0;
+            acc_msg.position.z = 0;
+            acc_msg.velocity.x = 0;
+            acc_msg.velocity.y = 0;
+            acc_msg.velocity.z = 0;
+            acc_msg.acceleration.x = optical_xyz[0];
+            acc_msg.acceleration.y = optical_xyz[1];
+            acc_msg.acceleration.z = optical_xyz[2];
+            acc_msg.jerk.x = 0;
+            acc_msg.jerk.y = 0;
+            acc_msg.jerk.z = 0;
+            acc_msg.yaw = des_yaw;
+            acc_msg.yaw_dot = 0;
+            acc_msg.header.frame_id = "world";
+            acc_cmd_pub.publish(acc_msg);
             rate.sleep();
         }
         else
         {
-            u_x = 0;
+            acc_msg.position.x = 0;
+            acc_msg.position.y = 0;
+            acc_msg.position.z = 0;
+            acc_msg.velocity.x = 0;
+            acc_msg.velocity.y = 0;
+            acc_msg.velocity.z = 0;
+            acc_msg.acceleration.x = 0;
+            acc_msg.acceleration.y = 0;
+            acc_msg.acceleration.z = 0;
+            acc_msg.jerk.x = 0;
+            acc_msg.jerk.y = 0;
+            acc_msg.jerk.z = 0;
+            acc_msg.yaw = des_yaw;
+            acc_msg.yaw_dot = 0;
+            acc_msg.header.frame_id = "world";
+            acc_cmd_pub.publish(acc_msg);
             rate.sleep();
         }
-    }
-}
-
-void RAID_AgiVS::yAxisControlLoop()
-{
-    ros::Rate rate(50);
-    while (ros::ok())
-    {
-        if (px4_state == 3)
-        {
-            auto start_time = std::chrono::high_resolution_clock::now();
-            //optical_y = optimizer_y.optimize(y_real, yv_real, optical_y[1], optical_y[2]);
-            u_y = optical_y[0];
-            auto end_time = std::chrono::high_resolution_clock::now();
-            double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
-            ROS_INFO("Execution time y: %f seconds", elapsed_time);
-            rate.sleep();
-        }
-        else
-        {
-            u_y = 0;
-            rate.sleep();
-        }
-    }
-}
-
-void RAID_AgiVS::zAxisControlLoop()
-{
-    ros::Rate rate(50);
-    while (ros::ok())
-    {
-        if (px4_state == 3)
-        {
-            auto start_time = std::chrono::high_resolution_clock::now();
-            //optical_z = optimizer_z.optimize(z_real, zv_real, optical_z[1], optical_z[2]);
-            u_z = optical_z[0];
-            auto end_time = std::chrono::high_resolution_clock::now();
-            double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
-            ROS_INFO("Execution time z: %f seconds", elapsed_time);
-            rate.sleep();
-        }
-        else
-        {
-            u_z = 0;
-            rate.sleep();
-        }
-    }
-}
-
-void RAID_AgiVS::uPubLoop()
-{
-    ros::Rate rate(50);
-    while (ros::ok())
-    {
-        acc_msg.position.x = 0;
-        acc_msg.position.y = 0;
-        acc_msg.position.z = 0;
-        acc_msg.velocity.x = 0;
-        acc_msg.velocity.y = 0;
-        acc_msg.velocity.z = 0;
-        acc_msg.acceleration.x = u_x;
-        acc_msg.acceleration.y = u_y;
-        acc_msg.acceleration.z = u_z;
-        acc_msg.jerk.x = 0;
-        acc_msg.jerk.y = 0;
-        acc_msg.jerk.z = 0;
-        acc_msg.yaw = des_yaw;
-        acc_msg.yaw_dot = 0;
-        acc_msg.header.frame_id = "world";
-        acc_cmd_pub.publish(acc_msg);
-        rate.sleep();
     }
 }
 

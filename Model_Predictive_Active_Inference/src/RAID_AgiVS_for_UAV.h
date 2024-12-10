@@ -15,7 +15,7 @@ class RAID_AgiVS
 public:
     // parameters and variables for the optimization problem
     double dt = 0.02;
-    int Np = 1;
+    int Np = 3;
     double precice_z1 = 1;
     double precice_z2 = 1;
     double precice_w1 = 1;
@@ -24,12 +24,8 @@ public:
     double precice_z_u = 0.001;
     double umin = -5;
     double umax = 5;
-    Optimizer optimizer_x;
-    Optimizer optimizer_y;
-    Optimizer optimizer_z;
-    vector<double> optical_x = {0, 0, 0, 0};
-    vector<double> optical_y = {0, 0, 0, 0};
-    vector<double> optical_z = {0, 0, 0, 0};
+    Optimizer optimizer_xyz;
+    vector<double> optical_xyz = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     std::atomic<double> x_real;
     std::atomic<double> xv_real;
     std::atomic<double> y_real;
@@ -38,9 +34,6 @@ public:
     std::atomic<double> zv_real;
 
     // parameters and variables for the controller
-    std::atomic<double> u_x;
-    std::atomic<double> u_y;
-    std::atomic<double> u_z;
     std::atomic<double> des_yaw;
     quadrotor_msgs::PositionCommand acc_msg;
 
@@ -58,18 +51,13 @@ public:
     ros::Publisher pub_u;
 
     // 控制线程
-    std::thread x_thread;
-    std::thread y_thread;
-    std::thread z_thread;
-    std::thread u_pub_thread;
+    std::thread xyz_thread;
 
     // functions
     RAID_AgiVS(ros::NodeHandle &nh);
     ~RAID_AgiVS();
     void startControlLoops();
-    void xAxisControlLoop();
-    void yAxisControlLoop();
-    void zAxisControlLoop();
+    void xyzAxisControlLoop();
     void cal_optical_ctrl_x();
     void cal_optical_ctrl_y();
     void cal_optical_ctrl_z();

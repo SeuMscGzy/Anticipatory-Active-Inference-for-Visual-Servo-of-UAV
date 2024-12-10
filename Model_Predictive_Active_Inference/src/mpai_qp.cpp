@@ -179,7 +179,6 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
 
     // Update bigMatrix1
     bigMatrix1 += M13 * precice_z_u;
-    cout << bigMatrix1 << endl;
     /*// Compute eigenvalues of bigMatrix1
     SelfAdjointEigenSolver<MatrixXd> eigensolver(bigMatrix1);
     if (eigensolver.info() != Success)
@@ -189,6 +188,7 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     VectorXd eigenvalues = eigensolver.eigenvalues();*/
 
     bigMatrix2 = F.transpose() * bigR * T1;
+    //cout << bigMatrix2 << endl;
 
     // Compute bigMatrix3 = -kr' * bigQ * T4
     bigMatrix3 = -kr_full.transpose() * bigQ * T4;
@@ -346,7 +346,7 @@ void Optimizer::shiftDecisionVariables(VectorXd &solution, VectorXd &Dualsolutio
 vector<double> Optimizer::optimize(Eigen::Vector3d x, Eigen::Vector3d vx, Eigen::Vector3d mu_init_, Eigen::Vector3d mu_p_init_)
 {
     RowVectorXd rowVec(6);
-    rowVec << x, vx;
+    rowVec << x.transpose(), vx.transpose();
     q = rowVec * bigMatrix2 + bigMatrix3;
     // cout << q << endl;
     l[3 * Np] = mu_init_[0] - 0.1;
@@ -361,6 +361,7 @@ vector<double> Optimizer::optimize(Eigen::Vector3d x, Eigen::Vector3d vx, Eigen:
     u[3 * Np + 4] = mu_p_init_[1] + 0.1;
     l[3 * Np + 5] = mu_p_init_[2] - 0.1;
     u[3 * Np + 5] = mu_p_init_[2] + 0.1;
+    // cout << "here" << endl;
     // cout << q << endl;
     // 更新求解器的梯度和边界
     solver.updateGradient(q);

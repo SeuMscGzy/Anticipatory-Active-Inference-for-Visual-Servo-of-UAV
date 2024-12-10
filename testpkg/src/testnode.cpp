@@ -144,7 +144,7 @@ public:
         auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
         cout << "image delay: " << delay2.count() << endl;
         cout << "viration times: " << count_for_overtime << endl;
-        cout << desired_yaw << endl;
+        // cout << desired_yaw << endl;
         // 图像处理完成后，设置processing为false
         {
             std::lock_guard<std::mutex> lock(cv_mutex);

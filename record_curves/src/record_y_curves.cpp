@@ -11,11 +11,11 @@ public:
         ros::NodeHandle nh;
 
         // 订阅主题
-        subscriber_ = nh.subscribe("/hat_x_topic", 0, &DataRecorder::callback, this);
+        subscriber_ = nh.subscribe("/hat_error_xyz", 1, &DataRecorder::callback, this);
 
         // 创建（或覆盖）CSV文件
         file_.open("data.csv", std::ofstream::out | std::ofstream::trunc);
-        file_ << "data[0],data[1],data[2],data[3],data[4],data[5],data[6],data[7]\n"; // 写入CSV文件的标题行
+        file_ << "data[0],data[1],data[2],data[3],data[4],data[5],data[6],data[7],data[8],data[9],data[10]\n"; // 写入CSV文件的标题行
     }
 
     ~DataRecorder()
@@ -26,10 +26,10 @@ public:
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
         // cout << msg->data.size() << endl;
-        if (msg->data.size() >= 8)
+        if (msg->data.size() >= 11)
         {
             file_ << msg->data[0] << "," << msg->data[1] << "," << msg->data[2] << ","
-                  << msg->data[3] << "," << msg->data[4] << "," << msg->data[5] << "," << msg->data[6] << "," << msg->data[7] << "\n";
+                  << msg->data[3] << "," << msg->data[4] << "," << msg->data[5] << "," << msg->data[6] << "," << msg->data[7] << "," << msg->data[8] << "," << msg->data[9] << "," << msg->data[10] << "\n";
         }
     }
 

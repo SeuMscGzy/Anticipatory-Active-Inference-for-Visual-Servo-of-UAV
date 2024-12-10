@@ -24,11 +24,11 @@ APO::APO()
       loss_or_not_(true),
       first_time_in_fun(true)
 {
-    A_bar << 0.458047258317164, 0.00704688089718714,
-        -8.63242909905424, 0.951328921120263;
-    C_bar << 0.541952741682836,
-        8.63242909905424;
-    A0 << 1, 0.0100000000000000,
+    A_bar << 0.148975591137423, 0.00993170607582819,
+        -12.1663399428895, 0.844195016445396;
+    C_bar << 0.851024408862577,
+        12.1663399428895;
+    A0 << 1, 0.0200000000000000,
         0, 1;
     relative_pos_sub = nh.subscribe("/point_with_fixed_delay", 1, &APO::relative_pos_Callback, this, ros::TransportHints().tcpNoDelay());
     Odom_sub = nh.subscribe("/mavros/local_position/odom", 1, &APO::Odom_Callback, this, ros::TransportHints().tcpNoDelay());
@@ -120,12 +120,15 @@ void APO::function(bool loss_or_not_)
             Eigen::Vector2d coeff(1, 0);
             predict_tag_x = coeff.transpose() * A0 * hat_tag_x;
             hat_tag_x = A_bar * hat_tag_x + C_bar * predict_tag_x;
+            filter_for_x.predict();
             filter_for_x.updateH2(hat_tag_x);
             predict_tag_y = coeff.transpose() * A0 * hat_tag_y;
             hat_tag_y = A_bar * hat_tag_y + C_bar * predict_tag_y;
+            filter_for_y.predict();
             filter_for_y.updateH2(hat_tag_y);
             predict_tag_z = coeff.transpose() * A0 * hat_tag_z;
             hat_tag_z = A_bar * hat_tag_z + C_bar * predict_tag_z;
+            filter_for_z.predict();
             filter_for_z.updateH2(hat_tag_z);
         }
     }

@@ -16,9 +16,9 @@ public:
     // parameters and variables for the optimization problem
     double dt = 0.02;
     int Np = 30;
-    double precice_z1 = 1;
-    double precice_z2 = 1;
-    double precice_w1 = 1;
+    double precice_z1 = 2;
+    double precice_z2 = 0.5;
+    double precice_w1 = 2;
     double precice_w2 = 1;
     double e1 = 2;
     double precice_z_u = 0.01;

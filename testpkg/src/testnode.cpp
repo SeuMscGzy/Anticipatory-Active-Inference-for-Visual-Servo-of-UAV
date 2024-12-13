@@ -67,9 +67,9 @@ public:
         Position_after = Eigen::Vector3d::Zero();
 
         R_c2a = Eigen::Matrix3d::Identity();
-        R_i2c << -0.011132390353491266, -0.9999353526178143, 0.002315268905193985,
-            -0.9999251397378155, 0.011143975071921292, 0.005052399420578767,
-            -0.0050778740951467494, -0.00225885030098508, -0.9999845562757407;
+        R_i2c << -0.01396, -0.99979, -0.00972,
+            -0.99986, 0.01410, -0.01494,
+            -0.00972, 0.00951, -0.99984;
         R_w2a = Eigen::Matrix3d::Identity();
         R_w2c = R_i2c;
 
@@ -105,47 +105,47 @@ public:
         ros::waitForShutdown();
     }
 
-    void faultProcess(chrono::time_point<high_resolution_clock> &image_timestamp_getimg_)
+    void faultProcess(ros::Time &image_timestamp_getimg_)
     {
         desired_yaw = 0;
         lost_target = true;
-        auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
-        if (delay.count() > 0)
+        auto delay = ros::Duration(0.058) - (ros::Time::now() - image_timestamp_getimg_);
+        if (delay > ros::Duration(0))
         {
-            this_thread::sleep_for(delay);
+            this_thread::sleep_for(std::chrono::milliseconds(int(delay.toSec() * 1000)));
         }
         else
         {
             count_for_overtime += 1;
         }
         publishDetectionResult(image_timestamp_getimg_);
-        auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
-        cout << "image delay: " << delay2.count() << endl;
-        cout << "viration times: " << count_for_overtime << endl;
-        // 图像处理完成后，设置processing为false
+        auto delay2 = ros::Time::now() - image_timestamp_getimg_;
+        // cout << "image delay: " << 1000 * delay2.toSec() << endl;
+        // cout << "viration times: " << count_for_overtime << endl;
+        //  图像处理完成后，设置processing为false
         {
             std::lock_guard<std::mutex> lock(cv_mutex);
             processing = false;
         }
     }
 
-    void normalProcess(chrono::time_point<high_resolution_clock> &image_timestamp_getimg_)
+    void normalProcess(ros::Time &image_timestamp_getimg_)
     {
-        auto delay = microseconds(58000) - duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
-        if (delay.count() > 0)
+        auto delay = ros::Duration(0.058) - (ros::Time::now() - image_timestamp_getimg_);
+        if (delay > ros::Duration(0))
         {
-            this_thread::sleep_for(delay);
+            this_thread::sleep_for(std::chrono::milliseconds(int(delay.toSec() * 1000)));
         }
         else
         {
             count_for_overtime += 1;
         }
         publishDetectionResult(image_timestamp_getimg_);
-        auto delay2 = duration_cast<microseconds>(high_resolution_clock::now() - image_timestamp_getimg_);
-        cout << "image delay: " << delay2.count() << endl;
-        cout << "viration times: " << count_for_overtime << endl;
-        // cout << desired_yaw << endl;
-        // 图像处理完成后，设置processing为false
+        auto delay2 = ros::Time::now() - image_timestamp_getimg_;
+        // cout << "image delay: " << 1000 * delay2.toSec() << endl;
+        // cout << "viration times: " << count_for_overtime << endl;
+        //  cout << desired_yaw << endl;
+        //  图像处理完成后，设置processing为false
         {
             std::lock_guard<std::mutex> lock(cv_mutex);
             processing = false;
@@ -163,7 +163,7 @@ public:
 
     void initializeCameraParameters()
     {
-        cam.initPersProjWithoutDistortion(424.32664299938756, 427.0096583397845, 341.9183547019188, 250.7599639707058);
+        cam.initPersProjWithoutDistortion(434.43380375206647, 435.83408965898377, 344.4014618175489, 252.20382148655915);
         if (!intrinsic_file.empty() && !camera_name.empty())
         {
             parser.parse(cam, intrinsic_file, camera_name, vpCameraParameters::perspectiveProjWithoutDistortion);
@@ -223,10 +223,10 @@ public:
     Eigen::Matrix3d R_w2a; // Rwa 世界到apriltag
     std_msgs::Float64MultiArray point_;
 
-    void publishDetectionResult(chrono::time_point<high_resolution_clock> &image_timestamp_)
+    void publishDetectionResult(ros::Time &image_timestamp_)
     {
         point_.data = {Position_after(0), Position_after(1), Position_after(2),
-                       image_timestamp_.time_since_epoch().count(), static_cast<double>(lost_target), desired_yaw};
+                       image_timestamp_.toSec(), static_cast<double>(lost_target), desired_yaw};
         point_pub_.publish(point_);
         point_.data.clear();
     }
@@ -270,7 +270,7 @@ public:
                 std::lock_guard<std::mutex> lock(data_mutex); // 加锁
                 R_w2c_temp = R_w2c;                           // 保护对 R_w2c 的读操作
             } // 超出作用域后自动解锁
-            chrono::time_point<high_resolution_clock> image_timestamp_getimg = high_resolution_clock::now();
+            ros::Time image_timestamp_getimg = ros::Time::now();
             try
             {
                 camera_cap.captureImage(distorted_image);
@@ -336,29 +336,36 @@ public:
                 }
                 lost_target = false;
                 bool pose_found = false;
-                for (size_t i = 0; i < ids.size(); i++)
+                if (ids.size() == 2)
                 {
-                    int id = ids[i];
-                    if (tagSizes.find(id) == tagSizes.end())
+                    int id = ids[1];
+                    double tagSize = tagSizes[id];
+                    vpHomogeneousMatrix cMo;
+                    try
                     {
-                        continue;
+                        detector_.getPose(1, tagSize, cam, cMo);
+                        cMo_vec.push_back(cMo);
+                        pose_found = true;
                     }
-                    else
+                    catch (const std::exception &e)
                     {
-                        double tagSize = tagSizes[id];
-                        vpHomogeneousMatrix cMo;
-                        try
-                        {
-                            detector_.getPose(i, tagSize, cam, cMo);
-                            cMo_vec.push_back(cMo);
-                            pose_found = true;
-                            break;
-                        }
-                        catch (const std::exception &e)
-                        {
-                            cout << "Error in getPose: " << e.what() << endl;
-                            continue;
-                        }
+                        cout << "Error in getPose: " << e.what() << endl;
+                    }
+                }
+                else
+                {
+                    int id = ids[0];
+                    double tagSize = tagSizes[id];
+                    vpHomogeneousMatrix cMo;
+                    try
+                    {
+                        detector_.getPose(0, tagSize, cam, cMo);
+                        cMo_vec.push_back(cMo);
+                        pose_found = true;
+                    }
+                    catch (const std::exception &e)
+                    {
+                        cout << "Error in getPose: " << e.what() << endl;
                     }
                 }
                 if (!pose_found || cMo_vec.empty())
@@ -371,13 +378,18 @@ public:
                     pose_matrix = cMo_vec[0];
                     vpRotationMatrix R_c2a_vp;
                     pose_matrix.extract(R_c2a_vp);
-                    Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R_c2a_map(R_c2a.data());
-                    R_c2a_map = Eigen::Matrix3d::Map(&R_c2a_vp[0][0]);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        for (int j = 0; j < 3; j++)
+                        {
+                            R_c2a(i * 3 + j) = R_c2a_vp[i][j];
+                        }
+                    }
                     R_w2a = R_w2c_temp * R_c2a;
                     if (ids.size() == 2 || ids[0] == 1)
                     {
                         Eigen::Vector3d t(0, -0.0584, 0);
-                        t = R_w2c_temp * t;
+                        t = R_c2a * t;
                         Position_after(0) = pose_matrix[0][3] - t[0];
                         Position_after(1) = pose_matrix[1][3] - t[1];
                         Position_after(2) = pose_matrix[2][3] - t[2];
@@ -388,11 +400,22 @@ public:
                         Position_after(1) = pose_matrix[1][3];
                         Position_after(2) = pose_matrix[2][3];
                     }
-                    Position_after(0) -= 0.0008636750407922696;
-                    Position_after(1) -= 0.038734772386209135;
-                    Position_after(2) += 0.03292374441878657; // 将其转换到imu飞控所在位置
+                    Position_after(0) += 0.001572;
+                    Position_after(1) -= 0.035988;
+                    Position_after(2) += 0.017475; // 将其转换到imu飞控所在位置
+                    static int loop = 0;
+                    if (loop == 10)
+                    {
+                        cout << ids.size() << " " << ids[0] << endl;
+                        cout << "Position_after: " << Position_after.transpose() << endl;
+                    }
+                    loop++;
+                    if (loop == 11)
+                    {
+                        loop = 0;
+                    }
+
                     Position_after = R_w2c_temp * Position_after;
-                    cout << "Position_after: " << Position_after.transpose() << endl;
                     R_w2a = R_w2c_temp * R_c2a;
                     Eigen::Quaterniond q(R_w2a);
                     double yaw = fromQuaternion2yaw(q);

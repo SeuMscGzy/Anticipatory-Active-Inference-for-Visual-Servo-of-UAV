@@ -33,7 +33,6 @@ public:
 	State_Data_t state_data;
 	ExtendedState_Data_t extended_state_data;
 	Odom_Data_t odom_data;
-	Odom_Data_t odom_data_mavros;
 	Imu_Data_t imu_data;
 	Command_Data_t cmd_data;
 	Battery_Data_t bat_data;

@@ -81,7 +81,7 @@ public:
 												  const Imu_Data_t &imu,
 												  Controller_Output_t &u, int state_count, bool in_landing_);
 	void updateFlightState(const Desired_State_t &des, const Odom_Data_t &odom, int state_count, bool in_landing_);
-	void calculateThrust(Controller_Output_t &u, const Eigen::Vector3d &des_acc);
+	void calculateThrustandAcc(Controller_Output_t &u, const Eigen::Vector3d &des_acc);
 	bool estimateThrustModel(const Eigen::Vector3d &est_v,
 							 const Parameter_t &param);
 	void resetThrustMapping(void);

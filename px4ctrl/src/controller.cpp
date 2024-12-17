@@ -119,7 +119,7 @@ void LinearControl::updateFlightState(const Desired_State_t &des, const Odom_Dat
   }
 }
 
-void LinearControl::calculateThrust(Controller_Output_t &u, const Eigen::Vector3d &des_acc)
+void LinearControl::calculateThrustandAcc(Controller_Output_t &u, const Eigen::Vector3d &des_acc)
 {
   double desired_thrust;
   switch (flight_state)
@@ -144,12 +144,9 @@ void LinearControl::calculateThrust(Controller_Output_t &u, const Eigen::Vector3
     {
       slow_start_step = 100;
     }
-    else
-    {
-      velocity_controller_x.init();
-      velocity_controller_y.init();
-      velocity_controller_z.init();
-    }
+    velocity_controller_x.init();
+    velocity_controller_y.init();
+    velocity_controller_z.init();
     break;
   }
 
@@ -256,7 +253,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   updateFlightState(des, odom, state_count, in_landing_);
 
   // 计算推力
-  calculateThrust(u, des_acc);
+  calculateThrustandAcc(u, des_acc);
   double roll, pitch;
   double yaw_odom = fromQuaternion2yaw(odom.q);
   double sin = std::sin(yaw_odom);

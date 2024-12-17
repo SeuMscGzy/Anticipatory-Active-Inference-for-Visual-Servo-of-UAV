@@ -49,6 +49,9 @@ public:
     ros::Subscriber px4_state_sub;
     ros::Subscriber relative_pos_sub;
     ros::Publisher pub_u;
+    ros::Publisher x_pub;
+    ros::Publisher y_pub;
+    ros::Publisher z_pub;
 
     // 控制线程
     std::thread xyz_thread;

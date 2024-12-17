@@ -22,6 +22,7 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
         -dt, 0, 0,
         0, -dt, 0,
         0, 0, -dt;
+    Bd = - Bd;
     Eigen::MatrixXd K(6, 6);
     K << 0.8, 0, 0, 0, 0, 0,
         0, 0.8, 0, 0, 0, 0,

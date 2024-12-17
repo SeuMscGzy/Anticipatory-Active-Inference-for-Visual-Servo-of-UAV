@@ -78,22 +78,39 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     double dt = 0.001;
-    Second_order_system second_order_system(100, 0, 0);
+    Second_order_system second_order_system1(1, 0, 0);
+    Second_order_system second_order_system2(2, 0, 0);
+    Second_order_system second_order_system3(3, 0, 0);
 
-    ros::Subscriber sub = nh.subscribe("/input_x_axis", 1, &Second_order_system::input_callback, &second_order_system);
-    ros::Publisher x_pub = nh.advertise<std_msgs::Float64MultiArray>("/x_state", 1);
+    ros::Subscriber sub1 = nh.subscribe("/input_x_axis", 1, &Second_order_system::input_callback, &second_order_system1);
+    ros::Subscriber sub2 = nh.subscribe("/input_y_axis", 1, &Second_order_system::input_callback, &second_order_system2);
+    ros::Subscriber sub3 = nh.subscribe("/input_z_axis", 1, &Second_order_system::input_callback, &second_order_system3);
+    ros::Publisher x_pub = nh.advertise<std_msgs::Float64MultiArray>("/hat_error_xyz", 1);
     int count = 0;
     ros::Rate loop_rate(1.0 / dt);
     while (ros::ok())
     {
-        second_order_system.update(dt);
-        second_order_system.print_state();
-        if (count != 0 && count % 50 == 0)
+        second_order_system1.update(dt);
+        second_order_system2.update(dt);
+        second_order_system3.update(dt);
+        if (count != 0 && count % 20 == 0)
         {
+            second_order_system1.print_state();
+            second_order_system2.print_state();
+            second_order_system3.print_state();
             std_msgs::Float64MultiArray x_msg;
-            x_msg.data.resize(2); // Ensure there is space for two elements
-            x_msg.data[0] = second_order_system.x1;
-            x_msg.data[1] = second_order_system.x2;
+            x_msg.data.resize(11); // Ensure there is space for two elements
+            x_msg.data[0] = second_order_system1.x1;
+            x_msg.data[1] = second_order_system1.x2;
+            x_msg.data[2] = second_order_system2.x1;
+            x_msg.data[3] = second_order_system2.x2;
+            x_msg.data[4] = second_order_system3.x1;
+            x_msg.data[5] = second_order_system3.x2;
+            x_msg.data[6] = 0;
+            x_msg.data[7] = 0;
+            x_msg.data[8] = 0;
+            x_msg.data[9] = 0;
+            x_msg.data[10] = 0;
             x_pub.publish(x_msg);
             count = 0;
         }

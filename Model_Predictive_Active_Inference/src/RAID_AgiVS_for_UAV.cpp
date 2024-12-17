@@ -15,7 +15,9 @@ RAID_AgiVS::RAID_AgiVS(ros::NodeHandle &nh)
 {
     acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
     pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
-
+    x_pub = nh.advertise<std_msgs::Float64>("/input_x_axis", 1);
+    y_pub = nh.advertise<std_msgs::Float64>("/input_y_axis", 1);
+    z_pub = nh.advertise<std_msgs::Float64>("/input_z_axis", 1);
     px4_state_sub = nh.subscribe("/px4_state_pub", 1, &RAID_AgiVS::StateCallback, this, ros::TransportHints().tcpNoDelay());
     relative_pos_sub = nh.subscribe("/hat_error_xyz", 1, &RAID_AgiVS::relative_pos_Callback, this, ros::TransportHints().tcpNoDelay());
 
@@ -70,6 +72,15 @@ void RAID_AgiVS::xyzAxisControlLoop()
             acc_msg.yaw_dot = 0;
             acc_msg.header.frame_id = "world";
             acc_cmd_pub.publish(acc_msg);
+            std_msgs::Float64 x_msg;
+            x_msg.data = optical_xyz[0];
+            x_pub.publish(x_msg);
+            std_msgs::Float64 y_msg;
+            y_msg.data = optical_xyz[1];
+            y_pub.publish(y_msg);
+            std_msgs::Float64 z_msg;
+            z_msg.data = optical_xyz[2];
+            z_pub.publish(z_msg);
             rate.sleep();
         }
         else

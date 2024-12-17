@@ -16,7 +16,7 @@ sudo chmod 777 /dev/ttyACM0 & sleep 1;
 roslaunch mavros px4.launch gcs_url:=udp://@10.193.119.163 & sleep 3;
 rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0 & sleep 1;
 rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0 & sleep 1;
-rosrun mavros mavcmd long 511 32 10000 0 0 0 0 0 & sleep 1;
+rosrun mavros mavcmd long 511 32 5000 0 0 0 0 0 & sleep 1;
 
 #将视觉定位发送给px4飞控
 rosrun fake_pose_publisher fake_pose_pub & sleep 1;

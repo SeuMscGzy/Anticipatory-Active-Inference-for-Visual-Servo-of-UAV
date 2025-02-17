@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(APO)
+project(RSM2)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -147,7 +147,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(APO src/APO.cpp)
+add_executable(RSM2 src/RSM2.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -160,7 +160,7 @@ add_executable(APO src/APO.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(APO
+target_link_libraries(RSM2
    ${catkin_LIBRARIES}
    Eigen3::Eigen
  )

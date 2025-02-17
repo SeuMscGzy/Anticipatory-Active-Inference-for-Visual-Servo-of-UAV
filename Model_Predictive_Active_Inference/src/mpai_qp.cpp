@@ -22,7 +22,7 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
         -dt, 0, 0,
         0, -dt, 0,
         0, 0, -dt;
-    Bd = - Bd;
+    Bd = -Bd;
     Eigen::MatrixXd K(6, 6);
     K << 0.8, 0, 0, 0, 0, 0,
         0, 0.8, 0, 0, 0, 0,
@@ -189,11 +189,11 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     VectorXd eigenvalues = eigensolver.eigenvalues();*/
 
     bigMatrix2 = F.transpose() * bigR * T1;
-    //cout << bigMatrix2 << endl;
+    // cout << bigMatrix2 << endl;
 
     // Compute bigMatrix3 = -kr' * bigQ * T4
     bigMatrix3 = -kr_full.transpose() * bigQ * T4;
-    //cout << bigMatrix3 << endl;
+    // cout << bigMatrix3 << endl;
     /*
     // 构建矩阵 M1 到 M4
     MatrixXd M1(1, 4);
@@ -421,7 +421,12 @@ void Optimizer::initsolver()
     solver.data()->setNumberOfConstraints(3 * Np + 6);
     solver.settings()->setAbsoluteTolerance(1e-3); // 设置绝对误差阈值
     solver.settings()->setRelativeTolerance(1e-3); // 设置相对误差阈值
-    solver.settings()->setMaxIteration(100);       // 设置最大迭代次数为100
+    // 6. 是否启用热启动
+    solver.settings()->setWarmStart(true);
+    // 7. 是否进行解的后处理(如Polish)
+    solver.settings()->setPolish(false);
+
+    solver.settings()->setMaxIteration(100); // 设置最大迭代次数为100
     solver.settings()->setVerbosity(false);
     P = bigMatrix1.sparseView();
     // cout << P << endl;

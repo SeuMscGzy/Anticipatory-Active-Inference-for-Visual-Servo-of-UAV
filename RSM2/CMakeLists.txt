@@ -16,14 +16,13 @@ find_package(Eigen3 REQUIRED)
 
 link_directories(/usr/local/lib)
 catkin_package(
-  INCLUDE_DIRS include
+  INCLUDE_DIRS
   LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS roscpp
 )
 
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  link_directories(/usr/local/lib)
   /usr/local/include  # 确保包含 CppAD 头文件
   /usr/include/eigen3
 )

@@ -33,7 +33,7 @@ link_directories(/usr/local/lib)
 #include_directories(${OpenBLAS_INCLUDE_DIRS})
 
 catkin_package(
-  INCLUDE_DIRS include
+  INCLUDE_DIRS
   LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS roscpp
   px4ctrl quadrotor_msgs uav_utils

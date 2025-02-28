@@ -43,17 +43,16 @@ int main(int argc, char **argv)
         {
             if (i == 0)
             {
-                z[i] = A_bar * z[i] + C_bar * b;
-                z[i](0) = b;
+                z[0] = A_bar * z[2] + C_bar * b;
             }
             else
             {
                 Vector2d coeff(1, 0);
                 double predict_tag_x;
                 predict_tag_x = coeff.transpose() * A0 * z[i - 1];
-                // cout << predict_tag_x << endl;
+                //cout << predict_tag_x << endl;
                 z[i] = A_bar * z[i - 1] + C_bar * predict_tag_x;
-                // cout<<z[i](1)<<endl;
+                //cout<<z[i](1)<<endl;
             }
         }
         // cout << a << " " << a + 0.02 << " " << a + 0.04 << endl;

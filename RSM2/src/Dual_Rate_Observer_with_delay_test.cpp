@@ -8,6 +8,7 @@
 #include <Eigen/Geometry>
 #include <vector>
 #include <stack>
+#include "Dual_Rate_Observer_with_delay.h"
 using namespace std;
 using namespace Eigen;
 
@@ -20,8 +21,11 @@ int main(int argc, char **argv)
     VectorXd L(2);
     L << -20, -100;
     double T_s = 0.06;
+    double T_delay = 0.058;
     double T_c = 0.001;
     int Np = static_cast<int>(T_s / T_c);
+    int N_delay = static_cast<int>(T_delay / T_c);
+    int N_minus = Np - N_delay;
     vector<double> yp(Np);
     vector<VectorXd> z_past(Np);
     vector<VectorXd> z_future(Np);
@@ -38,12 +42,12 @@ int main(int argc, char **argv)
     while (ros::ok())
     {
         double a = ros::Time::now().toSec() - t;
-        double b = a - 0.06;
+        double b = a - 0.058;
         z_future[0] = z_past[Np - 1];
         for (int i = 0; i < Np; i++)
         {
             yp[i] = b;
-            for (int j = 0; j < Np; j++)
+            for (int j = N_minus; j < Np; j++)
             {
                 yp[i] += T_c * z_past[j](1);
             }

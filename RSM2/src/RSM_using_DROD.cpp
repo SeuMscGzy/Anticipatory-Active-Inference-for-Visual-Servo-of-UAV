@@ -65,9 +65,8 @@ void RSM_using_DROD_::function(bool loss_or_not_)
         loss_target = false;
         first_time_in_fun = true;
     }
-    if (first_time_in_fun)
+    if (first_time_in_fun || timer_count > 2)
     {
-        is_data_refreshed = false;
         first_time_in_fun = false;
         drod_x.resetVectors();
         drod_y.resetVectors();
@@ -89,36 +88,75 @@ void RSM_using_DROD_::function(bool loss_or_not_)
     {
         if (timer_count == 0)
         {
+            int Np = drod_x.Np;
             is_data_refreshed = false;
-            drod_x.run(tag_x_real);
+            filter_for_x.predict();
+            filter_for_x.updateH2(drod_x.z_future[Np - 1]);
+            filter_for_x_delay.P = filter_for_x.P;
+            filter_for_x_delay.x_hat = filter_for_x.x_hat;
             Vector3d x_measure;
             x_measure << tag_x_real, drod_x.z_future[1];
-            filter_for_x.predict();
-            filter_for_x.updateJoint(x_measure);
-            drod_y.run(tag_y_real);
+            filter_for_x_delay.updateJoint(x_measure);
+            for (int i = 0; i < 3; i++)
+            {
+                filter_for_x_delay.predict();
+                filter_for_x_delay.updateH2(drod_x.z_future[20 * (i + 1) - 1]);
+            }
+            filter_for_x.P = filter_for_x_delay.P;
+            filter_for_x.x_hat = filter_for_x_delay.x_hat;
+            drod_x.run(tag_x_real);
+
+            filter_for_y.predict();
+            filter_for_y.updateH2(drod_y.z_future[Np - 1]);
+            filter_for_y_delay.P = filter_for_y.P;
+            filter_for_y_delay.x_hat = filter_for_y.x_hat;
             Vector3d y_measure;
             y_measure << tag_y_real, drod_y.z_future[1];
-            filter_for_y.predict();
-            filter_for_y.updateJoint(y_measure);
-            drod_z.run(tag_z_real);
+            filter_for_y_delay.updateJoint(y_measure);
+            for (int i = 0; i < 3; i++)
+            {
+                filter_for_y_delay.predict();
+                filter_for_y_delay.updateH2(drod_y.z_future[20 * (i + 1) - 1]);
+            }
+            filter_for_y.P = filter_for_y_delay.P;
+            filter_for_y.x_hat = filter_for_y_delay.x_hat;
+            drod_y.run(tag_y_real);
+
+            filter_for_z.predict();
+            filter_for_z.updateH2(drod_z.z_future[Np - 1]);
+            filter_for_z_delay.P = filter_for_z.P;
+            filter_for_z_delay.x_hat = filter_for_z.x_hat;
             Vector3d z_measure;
             z_measure << tag_z_real, drod_z.z_future[1];
-            filter_for_z.predict();
-            filter_for_z.updateJoint(z_measure);
+            filter_for_z_delay.updateJoint(z_measure);
+            for (int i = 0; i < 3; i++)
+            {
+                filter_for_z_delay.predict();
+                filter_for_z_delay.updateH2(drod_z.z_future[20 * (i + 1) - 1]);
+            }
+            filter_for_z.P = filter_for_z_delay.P;
+            filter_for_z.x_hat = filter_for_z_delay.x_hat;
+            drod_z.run(tag_z_real);
+            cout << "        " << endl;
+            cout << filter_for_x.x_hat(0) - des_yaw << endl;
+            cout << drod_x.z_future[1](0) - des_yaw << endl;
         }
         else
         {
-            int count = timer_count * static_cast<int>(filter_for_x.dt / drod_x.T_c);
-            if (count > drod_x.Np)
+            if (timer_count <= 2)
             {
-                count = drod_x.Np - 1;
+                int count = timer_count * static_cast<int>(filter_for_x.dt / drod_x.T_c) - 1;
+                if (count > drod_x.Np)
+                {
+                    count = drod_x.Np - 1;
+                }
+                filter_for_x.predict();
+                filter_for_x.updateH2(drod_x.z_future[count]);
+                filter_for_y.predict();
+                filter_for_y.updateH2(drod_y.z_future[count]);
+                filter_for_z.predict();
+                filter_for_z.updateH2(drod_z.z_future[count]);
             }
-            filter_for_x.predict();
-            filter_for_x.updateH2(drod_x.z_future[count]);
-            filter_for_y.predict();
-            filter_for_y.updateH2(drod_y.z_future[count]);
-            filter_for_z.predict();
-            filter_for_z.updateH2(drod_z.z_future[count]);
         }
     }
     std_msgs::Float64MultiArray msg;

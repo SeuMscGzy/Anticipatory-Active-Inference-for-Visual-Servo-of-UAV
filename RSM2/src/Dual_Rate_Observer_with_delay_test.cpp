@@ -8,7 +8,7 @@
 #include <Eigen/Geometry>
 #include <vector>
 #include <stack>
-#include "Dual_Rate_Observer_with_delay.h"
+
 using namespace std;
 using namespace Eigen;
 
@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     VectorXd L(2);
     L << -20, -100;
     double T_s = 0.06;
-    double T_delay = 0.058;
+    double T_delay = 0.06;
     double T_c = 0.001;
     int Np = static_cast<int>(T_s / T_c);
     int N_delay = static_cast<int>(T_delay / T_c);
@@ -42,7 +42,8 @@ int main(int argc, char **argv)
     while (ros::ok())
     {
         double a = ros::Time::now().toSec() - t;
-        double b = a - 0.058;
+        // double c = cos(ros::Time::now().toSec());
+        double b = a - 0.06;
         z_future[0] = z_past[Np - 1];
         for (int i = 0; i < Np; i++)
         {
@@ -67,7 +68,12 @@ int main(int argc, char **argv)
                 z_future[i] = z_temp;
             }
         }
-        cout << z_future[1](0) - a << endl;
+        cout << "position tracking error of TDDRO in sampling step:" << z_future[0](0) - a << endl;
+        cout << "velocity tracking error of TDDRO in sampling step:" << z_future[0](1) - 1 << endl;
+        cout << "position tracking error of TDDRO in first prediction step:" << z_future[20](0) - a - 0.02 << endl;
+        cout << "velocity tracking error of TDDRO in first prediction step:" << z_future[20](1) - 1 << endl;
+        cout << "position tracking error of TDDRO in second prediction step:" << z_future[40](0) - a - 0.04 << endl;
+        cout << "velocity tracking error of TDDRO in second prediction step:" << z_future[40](1) - 1 << endl;
         z_past = z_future;
         for (int i = 0; i < Np; i++)
         {

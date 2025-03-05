@@ -61,12 +61,12 @@ public:
         // 初始化过程噪声协方差 Q（根据实际情况调整）
         Q << 1e-4, 0, 0,
             0, 1e-3, 0,
-            0, 0, 1;
+            0, 0, 5e-2;
 
         // 初始化测量噪声协方差 R1 和 R2（根据实际情况调整）
         R1 << 1e-6; // 慢测量位置噪声较小
         R2 << 1e-3, 0,
-            0, 0.1; // 快测量位置和速度噪声较大
+            0, 1e-1; // 快测量位置和速度噪声较大
 
         // 初始化联合测量噪声协方差矩阵 R_joint
         R_joint = Matrix<double, 3, 3>::Zero();
@@ -159,6 +159,9 @@ public:
     KalmanFilter filter_for_x;
     KalmanFilter filter_for_y;
     KalmanFilter filter_for_z;
+    KalmanFilter filter_for_x_delay;
+    KalmanFilter filter_for_y_delay;
+    KalmanFilter filter_for_z_delay;
 
     // functions
     RSM_using_DROD_();

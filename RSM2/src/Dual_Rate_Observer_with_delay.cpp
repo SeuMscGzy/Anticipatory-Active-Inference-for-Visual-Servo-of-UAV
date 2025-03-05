@@ -7,7 +7,7 @@ DR0D::DR0D(ros::NodeHandle &nh)
     A << 0, 1, 0, 0;
     L << -20, -100;
     T_s = 0.06;
-    T_delay = 0.0;
+    T_delay = 0.058;
     T_c = 0.001;
     Np = static_cast<int>(T_s / T_c);
     N_delay = static_cast<int>(T_delay / T_c);

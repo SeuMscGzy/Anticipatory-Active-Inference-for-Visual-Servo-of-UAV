@@ -50,13 +50,18 @@ int main(int argc, char **argv)
                 Vector2d coeff(1, 0);
                 double predict_tag_x;
                 predict_tag_x = coeff.transpose() * A0 * z[i - 1];
-                //cout << predict_tag_x << endl;
+                // cout << predict_tag_x << endl;
                 z[i] = A_bar * z[i - 1] + C_bar * predict_tag_x;
-                //cout<<z[i](1)<<endl;
+                // cout<<z[i](1)<<endl;
             }
         }
         // cout << a << " " << a + 0.02 << " " << a + 0.04 << endl;
-        cout << z[0](0) - a << " " << z[1](0) - (a + 0.02) << " " << z[2](0) - (a + 0.04) << endl;
+        cout << "position tracking error of APO in sampling step:" << z[0](0) - a << endl;
+        cout << "velocity tracking error of APO in sampling step:" << z[0](1) - 1 << endl;
+        cout << "position tracking error of APO in first prediction step:" << z[1](0) - a - 0.02 << endl;
+        cout << "velocity tracking error of APO in first prediction step:" << z[1](1) - 1 << endl;
+        cout << "position tracking error of APO in second prediction step:" << z[2](0) - a - 0.04 << endl;
+        cout << "velocity tracking error of APO in second prediction step:" << z[2](1) - 1 << endl;
         rate.sleep();
     }
     return 0;

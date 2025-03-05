@@ -136,7 +136,7 @@ class RSM_using_DROD_
 {
 public:
     //DROD
-    DR0D drod_x, drod_y, drod_z;
+    DR0D drod;
     // parameters and variables for the DROD
     double tag_x_real, tag_y_real, tag_z_real;
     double uav_x, uav_y, uav_z, uav_vx, uav_vy, uav_vz;

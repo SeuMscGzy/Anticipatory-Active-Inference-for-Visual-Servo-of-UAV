@@ -11,7 +11,8 @@
 #include <Eigen/Geometry>
 #include <vector>
 #include <stack>
-
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
+typedef Eigen::Matrix<double, 6, 6> Matrix6d;
 using namespace std;
 using namespace Eigen;
 
@@ -19,23 +20,28 @@ class DR0D
 {
 public:
     // Constructor to initialize variables
-    DR0D(ros::NodeHandle &nh);
+    DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast);
 
     // Method to run the RMS calculation loop
-    void run(double measure_with_delay);
+    void run(Vector3d measure_with_delay);
 
 private:
-    Matrix2d A;          // State matrix
-    Vector2d L;                // Feedback matrix
+    Matrix6d A;          // State matrix
+    Eigen::Matrix<double, 6, 3> L;                // Feedback matrix
+    Eigen::Matrix<double, 3, 6> C1;                // Feedback matrix
+    Eigen::Matrix<double, 3, 6> C2;                // Feedback matrix
     double T_s;                // Sample time
-    double T_delay;            // Delay time
-    double T_c;                // Control time
-    int Np;                    // Number of steps
+    double T_d;            // Delay time
+    double T_c;                // Discrete calculation time
+    double T_f;                // Fast time
+    int N_p;                    // Number of steps
+    int N_cal;                // Number of calculation steps
     int N_delay;               // Number of delay steps
     int N_minus;               // Np - N_delay
-    vector<double> yp;         // Vector for intermediate calculations
-    vector<Vector2d> z_past;   // Past states
-    vector<Vector2d> z_future; // Future states
+    vector<Vector3d> yp;         // Vector for intermediate calculations
+    vector<Vector6d> z_past;   // Past states
+    vector<Vector6d> z_future; // Future states
+    vector<Vector6d> z_future_dt; // Future states
     friend class RSM_using_DROD_;
 
     // Method to reset vectors for the next iteration

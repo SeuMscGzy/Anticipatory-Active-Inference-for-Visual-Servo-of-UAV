@@ -1,59 +1,82 @@
 #include "Dual_Rate_Observer_with_delay.h"
 
 // Constructor to initialize variables
-DR0D::DR0D(ros::NodeHandle &nh)
+DR0D::DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast)
 {
     // Initialize matrices and variables
-    A << 0, 1, 0, 0;
-    L << -20, -100;
-    T_s = 0.06;
-    T_delay = 0.058;
+    A << 0, 1, 0, 0, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0, 0, 1, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0, 0, 0, 0, 1, 0, 0, 0, 0,  0, 0;
+    L << -20, 0, 0, -100, 0, 0, 0, -20, 0, 0, -100, 0, 0, 0, -20, 0, 0, -100;
+    C1 << 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0;
+    C2 << 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1;
+    T_s = T_sampling;
+    T_d = T_delay;
+    T_f = T_fast;
     T_c = 0.001;
-    Np = static_cast<int>(T_s / T_c);
+    N_cal = static_cast<int>(T_s / T_c);
+    N_p = static_cast<int>(T_s / T_f);
     N_delay = static_cast<int>(T_delay / T_c);
-    N_minus = Np - N_delay;
+    N_minus = N_cal - N_delay;
 
-    yp.resize(Np);
-    z_past.resize(Np);
-    z_future.resize(Np);
+    yp.resize(N_cal);
+    z_past.resize(N_cal);
+    z_future.resize(N_cal);
+    z_future_dt.resize(N_p + 1);
 
-    Vector2d z_temp;
-    z_temp << 0, 0;
-    for (int i = 0; i < Np; i++)
+    Vector6d z_temp;
+    z_temp << 0, 0, 0, 0, 0, 0;
+    Vector3d y_temp;
+    y_temp << 0, 0, 0;
+    for (int i = 0; i < N_cal; i++)
     {
-        yp[i] = 0;
+        yp[i] = y_temp;
         z_past[i] = z_temp;
         z_future[i] = z_temp;
+    }
+    for (int i = 0; i < N_p; i++)
+    {
+        z_future_dt[i] = z_temp;
     }
 }
 
 // Method to run the DROD calculation loop
-void DR0D::run(double measure_with_delay)
+void DR0D::run(Vector3d measure_with_delay)
 {
     // Reset the vectors for the next iteration
     resetVectors();
-    z_future[0] = z_past[Np - 1];
-    for (int i = 0; i < Np; i++)
+    z_future[0] = z_past[N_cal - 1];
+    for (int i = 0; i < N_cal; i++)
     {
         yp[i] = measure_with_delay;
-        for (int j = N_minus; j < Np; j++)
+        for (int j = N_minus; j < N_cal; j++)
         {
-            yp[i] += T_c * z_past[j](1);
+            yp[i] += T_c * C2 * z_past[j];
         }
         for (int k = 0; k < i; k++)
         {
-            yp[i] += T_c * z_future[k](1);
+            yp[i] += T_c * C2 * z_future[k];
         }
-        Vector2d z_temp;
+        Vector6d z_temp;
         if (i == 0)
         {
-            z_temp = z_future[i] + T_c * (A * z_future[i] - L * (yp[i] - z_future[i](0)));
+            z_temp = z_future[i] + T_c * (A * z_future[i] - L * (yp[i] - C1 * z_future[i]));
             z_future[i] = z_temp;
         }
         else
         {
-            z_temp = z_future[i - 1] + T_c * (A * z_future[i - 1] - L * (yp[i] - z_future[i - 1](0)));
+            z_temp = z_future[i - 1] + T_c * (A * z_future[i - 1] - L * (yp[i] - C1 * z_future[i - 1]));
             z_future[i] = z_temp;
+        }
+    }
+    int count = static_cast<int>(T_f / T_c);
+    for (int i = 0; i <= N_p; i++)
+    {
+        if (i == 0)
+        {
+            z_future_dt[i] = z_future[count * i + 1];
+        }
+        else
+        {
+            z_future_dt[i] = z_future[count * i - 1];
         }
     }
     z_past = z_future;
@@ -62,22 +85,29 @@ void DR0D::run(double measure_with_delay)
 // Method to reset vectors for the next iteration
 void DR0D::resetVectors()
 {
-    for (int i = 0; i < Np; i++)
+    Vector6d z_temp;
+    z_temp << 0, 0, 0, 0, 0, 0;
+    for (int i = 0; i < N_cal; i++)
     {
-        Vector2d z_temp;
-        z_temp << 0, 0;
-        yp[i] = 0;
+
+        Vector3d y_temp;
+        y_temp << 0, 0, 0;
+        yp[i] = y_temp;
         z_future[i] = z_temp;
+    }
+    for (int i = 0; i < N_p; i++)
+    {
+        z_future_dt[i] = z_temp;
     }
 }
 
 // Method to reset vectors for the next iteration
 void DR0D::resetVectors_past()
 {
-    for (int i = 0; i < Np; i++)
+    for (int i = 0; i < N_cal; i++)
     {
-        Vector2d z_temp;
-        z_temp << 0, 0;
+        Vector6d z_temp;
+        z_temp << 0, 0, 0, 0, 0, 0;
         z_past[i] = z_temp;
     }
 }

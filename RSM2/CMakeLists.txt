@@ -147,7 +147,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(RSM2 src/Dual_Rate_Observer_with_delay.cpp src/RSM_using_DROD.cpp)
-#add_executable(RSM2 src/Dual_Rate_Observer_with_delay_test.cpp)
+#add_executable(RSM2 src/RSM_using_APO.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

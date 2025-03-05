@@ -114,6 +114,8 @@ void APO::function(bool loss_or_not_)
             z_measure << tag_z_real, hat_tag_z;
             filter_for_z.predict();
             filter_for_z.updateJoint(z_measure);
+            cout << "        " << endl;
+            cout << filter_for_x.x_hat(0) - des_yaw << endl;
         }
         else
         {

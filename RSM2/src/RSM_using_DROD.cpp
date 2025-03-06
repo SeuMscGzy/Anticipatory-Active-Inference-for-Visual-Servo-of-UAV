@@ -21,7 +21,7 @@ RSM_using_DROD_::RSM_using_DROD_()
 {
     relative_pos_sub = nh.subscribe("/point_with_fixed_delay", 1, &RSM_using_DROD_::relative_pos_Callback, this, ros::TransportHints().tcpNoDelay());
     Odom_sub = nh.subscribe("/mavros/local_position/odom", 1, &RSM_using_DROD_::Odom_Callback, this, ros::TransportHints().tcpNoDelay());
-    timer = nh.createTimer(ros::Duration(filter_for_x.dt), &RSM_using_DROD_::timerCallback, this);
+    timer = nh.createTimer(ros::Duration(filter.dt), &RSM_using_DROD_::timerCallback, this);
     hat_pub = nh.advertise<std_msgs::Float64MultiArray>("/hat_error_xyz", 1);
 }
 
@@ -81,9 +81,7 @@ void RSM_using_DROD_::function(bool loss_or_not_)
         drod.z_future_dt[0](3) = 0;
         drod.z_future_dt[0](4) = tag_z_real;
         drod.z_future_dt[0](5) = 0;
-        filter_for_x.x_hat << tag_x_real, 0, 0;
-        filter_for_y.x_hat << tag_y_real, 0, 0;
-        filter_for_z.x_hat << tag_z_real, 0, 0;
+        filter.x_hat << tag_x_real, 0, 0, tag_y_real, 0, 0, tag_z_real, 0, 0;
     }
     else
     {
@@ -91,102 +89,51 @@ void RSM_using_DROD_::function(bool loss_or_not_)
         {
             int Np = drod.N_p;
             is_data_refreshed = false;
-            filter_for_x.predict();
-            Vector2d x_pre_drod;
-            x_pre_drod << drod.z_future_dt[Np](0), drod.z_future_dt[Np](1);
-            filter_for_x.updateH2(x_pre_drod);
-            filter_for_x_delay.P = filter_for_x.P;
-            filter_for_x_delay.x_hat = filter_for_x.x_hat;
-            Vector2d x_pre_drod_past;
-            x_pre_drod_past << drod.z_future_dt[0](0), drod.z_future_dt[0](1);
-            Vector3d x_measure;
-            x_measure << tag_x_real, x_pre_drod_past;
-            filter_for_x_delay.updateJoint(x_measure);
+            filter.predict();
+            Vector6d state_pre_drod;
+            state_pre_drod << drod.z_future_dt[Np](0), drod.z_future_dt[Np](1), drod.z_future_dt[Np](2),
+                drod.z_future_dt[Np](3), drod.z_future_dt[Np](4), drod.z_future_dt[Np](5);
+            filter.updateH2(state_pre_drod);
+            filter_delay.P = filter.P;
+            filter_delay.x_hat = filter.x_hat;
+            Vector9d All_measure;
+            All_measure << Measure_xyz, drod.z_future_dt[0](0), drod.z_future_dt[0](1), drod.z_future_dt[0](2),
+                drod.z_future_dt[0](3), drod.z_future_dt[0](4), drod.z_future_dt[0](5);
+            filter_delay.updateJoint(All_measure);
             for (int i = 0; i < 3; i++)
             {
-                filter_for_x_delay.predict();
-                Vector2d x_pre_drod_temp;
-                x_pre_drod_temp << drod.z_future_dt[i+1](0), drod.z_future_dt[i+1](1);
-                filter_for_x_delay.updateH2(x_pre_drod_temp);
+                filter_delay.predict();
+                Vector6d state_pre_drod_temp;
+                state_pre_drod_temp << drod.z_future_dt[i + 1](0), drod.z_future_dt[i + 1](1), drod.z_future_dt[i + 1](2),
+                    drod.z_future_dt[i + 1](3), drod.z_future_dt[i + 1](4), drod.z_future_dt[i + 1](5);
+                filter_delay.updateH2(state_pre_drod_temp);
             }
-            filter_for_x.P = filter_for_x_delay.P;
-            filter_for_x.x_hat = filter_for_x_delay.x_hat;
-
-
-            filter_for_y.predict();
-            Vector2d y_pre_drod;
-            y_pre_drod << drod.z_future_dt[Np](2), drod.z_future_dt[Np](3);
-            filter_for_y.updateH2(y_pre_drod);
-            filter_for_y_delay.P = filter_for_y.P;
-            filter_for_y_delay.x_hat = filter_for_y.x_hat;
-            Vector2d y_pre_drod_past;
-            y_pre_drod_past << drod.z_future_dt[0](2), drod.z_future_dt[0](3);
-            Vector3d y_measure;
-            y_measure << tag_y_real, y_pre_drod_past;
-            filter_for_y_delay.updateJoint(y_measure);
-            for (int i = 0; i < 3; i++)
-            {
-                filter_for_y_delay.predict();
-                Vector2d y_pre_drod_temp;
-                y_pre_drod_temp << drod.z_future_dt[i+1](2), drod.z_future_dt[i+1](3);
-                filter_for_y_delay.updateH2(y_pre_drod_temp);
-            }
-            filter_for_y.P = filter_for_y_delay.P;
-            filter_for_y.x_hat = filter_for_y_delay.x_hat;
-
-            filter_for_z.predict();
-            Vector2d z_pre_drod;
-            z_pre_drod << drod.z_future_dt[Np](4), drod.z_future_dt[Np](5);
-            filter_for_z.updateH2(z_pre_drod);
-            filter_for_z_delay.P = filter_for_z.P;
-            filter_for_z_delay.x_hat = filter_for_z.x_hat;
-            Vector2d z_pre_drod_past;
-            z_pre_drod_past << drod.z_future_dt[0](4), drod.z_future_dt[0](5);
-            Vector3d z_measure;
-            z_measure << tag_z_real, z_pre_drod_past;
-            filter_for_z_delay.updateJoint(z_measure);
-            for (int i = 0; i < 3; i++)
-            {
-                filter_for_z_delay.predict();
-                Vector2d z_pre_drod_temp;
-                z_pre_drod_temp << drod.z_future_dt[i+1](4), drod.z_future_dt[i+1](5);
-                filter_for_z_delay.updateH2(z_pre_drod_temp);
-            }
-            filter_for_z.P = filter_for_z_delay.P;
-            filter_for_z.x_hat = filter_for_z_delay.x_hat;
-            Vector3d Measure_xyz;
-            Measure_xyz << tag_x_real, tag_y_real, tag_z_real;
+            filter.P = filter_delay.P;
+            filter.x_hat = filter_delay.x_hat;
             drod.run(Measure_xyz);
             cout << "        " << endl;
-            cout << filter_for_x.x_hat(0) - des_yaw << endl;
-            //cout << drod_x.z_future[1](0) - des_yaw << endl;
+            cout << filter.x_hat(3) - des_yaw << endl;
+            // cout << drod_x.z_future[1](0) - des_yaw << endl;
         }
         else
         {
             if (timer_count <= 2)
             {
-                filter_for_x.predict();
-                Vector2d x_pre_drod_temp;
-                x_pre_drod_temp << drod.z_future_dt[timer_count](0), drod.z_future_dt[timer_count](1);
-                filter_for_x.updateH2(x_pre_drod_temp);
-                filter_for_y.predict();
-                Vector2d y_pre_drod_temp;
-                y_pre_drod_temp << drod.z_future_dt[timer_count](2), drod.z_future_dt[timer_count](3);
-                filter_for_y.updateH2(y_pre_drod_temp);
-                filter_for_z.predict();
-                Vector2d z_pre_drod_temp;
-                z_pre_drod_temp << drod.z_future_dt[timer_count](4), drod.z_future_dt[timer_count](5);
-                filter_for_z.updateH2(z_pre_drod_temp);
+                filter.predict();
+                Vector6d state_pre_drod_temp;
+                state_pre_drod_temp << drod.z_future_dt[timer_count](0), drod.z_future_dt[timer_count](1), drod.z_future_dt[timer_count](2),
+                    drod.z_future_dt[timer_count](3), drod.z_future_dt[timer_count](4), drod.z_future_dt[timer_count](5);
+                filter.updateH2(state_pre_drod_temp);
             }
         }
     }
     std_msgs::Float64MultiArray msg;
-    msg.data.push_back(filter_for_x.x_hat(0) - uav_x);
-    msg.data.push_back(filter_for_x.x_hat(1) - uav_vx);
-    msg.data.push_back(filter_for_y.x_hat(0) - uav_y);
-    msg.data.push_back(filter_for_y.x_hat(1) - uav_vy);
-    msg.data.push_back(filter_for_z.x_hat(0) - uav_z);
-    msg.data.push_back(filter_for_z.x_hat(1) - uav_vz);
+    msg.data.push_back(filter.x_hat(0) - uav_x);
+    msg.data.push_back(filter.x_hat(1) - uav_vx);
+    msg.data.push_back(filter.x_hat(3) - uav_y);
+    msg.data.push_back(filter.x_hat(4) - uav_vy);
+    msg.data.push_back(filter.x_hat(6) - uav_z);
+    msg.data.push_back(filter.x_hat(7) - uav_vz);
     msg.data.push_back(tag_x_real - uav_x);
     msg.data.push_back(tag_y_real - uav_y);
     msg.data.push_back(tag_z_real - uav_z);
@@ -194,7 +141,7 @@ void RSM_using_DROD_::function(bool loss_or_not_)
     msg.data.push_back(des_yaw);
     hat_pub.publish(msg);
     double end_time = ros::Time::now().toSec();
-    //cout << "time cost:" << end_time - start_time << endl;
+    cout << "time cost:" << end_time - start_time << endl;
 }
 
 void RSM_using_DROD_::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
@@ -202,6 +149,7 @@ void RSM_using_DROD_::relative_pos_Callback(const std_msgs::Float64MultiArray::C
     tag_x_real = msg->data[0] + uav_x;
     tag_y_real = msg->data[1] + uav_y;
     tag_z_real = msg->data[2] + uav_z;
+    Measure_xyz << tag_x_real, tag_y_real, tag_z_real;
     loss_or_not_ = msg->data[4];
     des_yaw = msg->data[5];
     is_data_refreshed = true;

@@ -19,6 +19,8 @@ int main(int argc, char **argv)
         double b = sin(ros::Time::now().toSec() - a - 0.058);
         double c = sin(ros::Time::now().toSec() - a);
         msg.data[0] = b;
+        msg.data[1] = b;
+        msg.data[2] = b;
         msg.data[5] = c;
         pub.publish(msg);
         ros::spinOnce();

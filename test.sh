@@ -23,17 +23,6 @@ rosrun mavros mavcmd long 511 32 10000 0 0 0 0 0 & sleep 1;
 rosrun topic_tools relay /vrpn_client_node/MCServer/0/pose /mavros/vision_pose/pose & sleep 2;
 
 
-
-#计算世界系下的相对位置
-#rosrun visp_apriltah_detect apriltag_detect & sleep 1;
-
-#控制器节点
-#rosrun aic_plus_apo aic_plus_apo & sleep 1;
-#rosrun 2rd_aic_apo aic_plus_apo_2rd & sleep 1;
-#rosrun aic_apo_2rd_with_d aic_apo_2rd_with_d & sleep 1;
-#rosrun pid pid & sleep 1;
-#rosrun aic_with_d aic_with_d & sleep 1;
-
 #切换无人机跟踪偏置的节点
 #rosrun Keyboard_change_bias Keyboard_change_bias & sleep 1;
 

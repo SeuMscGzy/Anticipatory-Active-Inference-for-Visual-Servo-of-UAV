@@ -112,7 +112,7 @@ void RSM_using_DROD_::function(bool loss_or_not_)
             filter.x_hat = filter_delay.x_hat;
             drod.run(Measure_xyz);
             cout << "        " << endl;
-            cout << filter.x_hat(3) - des_yaw << endl;
+            cout << filter.x_hat(0) << endl;
             // cout << drod_x.z_future[1](0) - des_yaw << endl;
         }
         else
@@ -124,6 +124,7 @@ void RSM_using_DROD_::function(bool loss_or_not_)
                 state_pre_drod_temp << drod.z_future_dt[timer_count](0), drod.z_future_dt[timer_count](1), drod.z_future_dt[timer_count](2),
                     drod.z_future_dt[timer_count](3), drod.z_future_dt[timer_count](4), drod.z_future_dt[timer_count](5);
                 filter.updateH2(state_pre_drod_temp);
+                cout << filter.x_hat(0) << endl;
             }
         }
     }

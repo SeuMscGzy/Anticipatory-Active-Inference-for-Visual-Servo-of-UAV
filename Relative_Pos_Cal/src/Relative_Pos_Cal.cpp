@@ -280,7 +280,6 @@ public:
                     faultProcess(image_timestamp_getimg);
                     continue;
                 }
-                cv::cvtColor(distorted_image, distorted_image, cv::COLOR_BGR2GRAY);
                 vpImageConvert::convert(distorted_image, I);
                 // chrono::time_point<high_resolution_clock> image_timestamp_getimg_over = high_resolution_clock::now();
                 // cout << "image get time: " << duration_cast<microseconds>(image_timestamp_getimg_over - image_timestamp_getimg).count() << endl;
@@ -403,6 +402,7 @@ public:
                     Position_after(0) += 0.00125;
                     Position_after(1) -= 0.03655;
                     Position_after(2) += 0.02884; // 将其转换到imu飞控所在位置
+                    Position_after = R_w2c_temp * Position_after;
                     static int loop = 0;
                     if (loop == 10)
                     {
@@ -415,7 +415,6 @@ public:
                         loop = 0;
                     }
 
-                    Position_after = R_w2c_temp * Position_after;
                     R_w2a = R_w2c_temp * R_c2a;
                     Eigen::Quaterniond q(R_w2a);
                     double yaw = fromQuaternion2yaw(q);

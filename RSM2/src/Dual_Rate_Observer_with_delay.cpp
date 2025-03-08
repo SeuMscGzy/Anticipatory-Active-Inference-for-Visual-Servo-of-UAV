@@ -4,10 +4,31 @@
 DR0D::DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast)
 {
     // Initialize matrices and variables
-    A << 0, 1, 0, 0, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0, 0, 1, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0, 0, 0, 0, 1, 0, 0, 0, 0,  0, 0;
-    L << -30, 0, 0, -225, 0, 0, 0, -30, 0, 0, -225, 0, 0, 0, -30, 0, 0, -225;
-    C1 << 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0;
-    C2 << 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1;
+    A.resize(6, 6);
+    A << 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 1,
+        0, 0, 0, 0, 0, 0;
+
+    L.resize(6, 3);
+    L << -20, 0, 0,
+        -100, 0, 0,
+        0, -20, 0,
+        0, -100, 0,
+        0, 0, -20,
+        0, 0, -100;
+
+    C1.resize(3, 6);
+    C1 << 1, 0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0,
+        0, 0, 0, 0, 1, 0;
+
+    C2.resize(3, 6);
+    C2 << 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0, 1;
     T_s = T_sampling;
     T_d = T_delay;
     T_f = T_fast;
@@ -32,7 +53,7 @@ DR0D::DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast
         z_past[i] = z_temp;
         z_future[i] = z_temp;
     }
-    for (int i = 0; i < N_p; i++)
+    for (int i = 0; i <= N_p; i++)
     {
         z_future_dt[i] = z_temp;
     }
@@ -41,31 +62,16 @@ DR0D::DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast
 // Method to run the DROD calculation loop
 void DR0D::run(Vector3d measure_with_delay)
 {
-    // Reset the vectors for the next iteration
-    resetVectors();
-    z_future[0] = z_past[N_cal - 1];
-    for (int i = 0; i < N_cal; i++)
+    yp[0] = measure_with_delay;
+    for (int j = N_minus; j < N_cal; j++)
     {
-        yp[i] = measure_with_delay;
-        for (int j = N_minus; j < N_cal; j++)
-        {
-            yp[i] += T_c * C2 * z_past[j];
-        }
-        for (int k = 0; k < i; k++)
-        {
-            yp[i] += T_c * C2 * z_future[k];
-        }
-        Vector6d z_temp;
-        if (i == 0)
-        {
-            z_temp = z_future[i] + T_c * (A * z_future[i] - L * (yp[i] - C1 * z_future[i]));
-            z_future[i] = z_temp;
-        }
-        else
-        {
-            z_temp = z_future[i - 1] + T_c * (A * z_future[i - 1] - L * (yp[i] - C1 * z_future[i - 1]));
-            z_future[i] = z_temp;
-        }
+        yp[0] += T_c * C2 * z_past[j];
+    }
+    z_future[0] = z_future[N_cal-1] + T_c * (A * z_future[N_cal-1] - L * (yp[0] - C1 * z_future[N_cal-1]));
+    for (int i = 1; i < N_cal; i++)
+    {
+        yp[i] = yp[i - 1] + T_c * C2 * z_future[i - 1];
+        z_future[i] = z_future[i - 1] + T_c * (A * z_future[i - 1] - L * (yp[i] - C1 * z_future[i - 1]));
     }
     int count = static_cast<int>(T_f / T_c);
     for (int i = 0; i <= N_p; i++)
@@ -95,7 +101,7 @@ void DR0D::resetVectors()
         yp[i] = y_temp;
         z_future[i] = z_temp;
     }
-    for (int i = 0; i < N_p; i++)
+    for (int i = 0; i <= N_p; i++)
     {
         z_future_dt[i] = z_temp;
     }

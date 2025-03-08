@@ -64,24 +64,13 @@ void RSM_using_DROD_::function(bool loss_or_not_)
         loss_target = false;
         first_time_in_fun = true;
     }
-    if (first_time_in_fun || timer_count > 2)
+    if (first_time_in_fun)
     {
         first_time_in_fun = false;
-        drod.resetVectors();
-        drod.resetVectors_past();
-        drod.z_future[0](0) = tag_x_real;
-        drod.z_future[0](1) = 0;
-        drod.z_future[0](2) = tag_y_real;
-        drod.z_future[0](3) = 0;
-        drod.z_future[0](4) = tag_z_real;
-        drod.z_future[0](5) = 0;
-        drod.z_future_dt[0](0) = tag_x_real;
-        drod.z_future_dt[0](1) = 0;
-        drod.z_future_dt[0](2) = tag_y_real;
-        drod.z_future_dt[0](3) = 0;
-        drod.z_future_dt[0](4) = tag_z_real;
-        drod.z_future_dt[0](5) = 0;
+        drod.z_future[0] << tag_x_real, 0, tag_y_real, 0, tag_z_real, 0;
+        drod.z_future_dt[0] << tag_x_real, 0, tag_y_real, 0, tag_z_real, 0;
         filter.x_hat << tag_x_real, 0, 0, tag_y_real, 0, 0, tag_z_real, 0, 0;
+        filter_delay.x_hat << tag_x_real, 0, 0, tag_y_real, 0, 0, tag_z_real, 0, 0;
     }
     else
     {
@@ -89,31 +78,23 @@ void RSM_using_DROD_::function(bool loss_or_not_)
         {
             int Np = drod.N_p;
             is_data_refreshed = false;
-            filter.predict();
-            Vector6d state_pre_drod;
-            state_pre_drod << drod.z_future_dt[Np](0), drod.z_future_dt[Np](1), drod.z_future_dt[Np](2),
-                drod.z_future_dt[Np](3), drod.z_future_dt[Np](4), drod.z_future_dt[Np](5);
-            filter.updateH2(state_pre_drod);
-            filter_delay.P = filter.P;
-            filter_delay.x_hat = filter.x_hat;
-            Vector9d All_measure;
-            All_measure << Measure_xyz, drod.z_future_dt[0](0), drod.z_future_dt[0](1), drod.z_future_dt[0](2),
-                drod.z_future_dt[0](3), drod.z_future_dt[0](4), drod.z_future_dt[0](5);
-            filter_delay.updateJoint(All_measure);
+            filter.P = filter_delay.P;
+            filter.x_hat = filter_delay.x_hat;
+            Vector9d state_pre_drod_temp;
+            state_pre_drod_temp << Measure_xyz, drod.z_future_dt[0](0), drod.z_future_dt[0](1), drod.z_future_dt[0](2),
+            drod.z_future_dt[0](3), drod.z_future_dt[0](4), drod.z_future_dt[0](5);
+            filter.updateJoint(state_pre_drod_temp);
             for (int i = 0; i < 3; i++)
             {
-                filter_delay.predict();
+                filter.predict();
                 Vector6d state_pre_drod_temp;
                 state_pre_drod_temp << drod.z_future_dt[i + 1](0), drod.z_future_dt[i + 1](1), drod.z_future_dt[i + 1](2),
                     drod.z_future_dt[i + 1](3), drod.z_future_dt[i + 1](4), drod.z_future_dt[i + 1](5);
-                filter_delay.updateH2(state_pre_drod_temp);
+                filter.updateH2(state_pre_drod_temp);
             }
-            filter.P = filter_delay.P;
-            filter.x_hat = filter_delay.x_hat;
+            filter_delay.P = filter.P ;
+            filter_delay.x_hat = filter.x_hat;
             drod.run(Measure_xyz);
-            cout << "        " << endl;
-            cout << filter.x_hat(0) << endl;
-            // cout << drod_x.z_future[1](0) - des_yaw << endl;
         }
         else
         {
@@ -141,8 +122,8 @@ void RSM_using_DROD_::function(bool loss_or_not_)
     msg.data.push_back(loss_or_not_);
     msg.data.push_back(des_yaw);
     hat_pub.publish(msg);
-    double end_time = ros::Time::now().toSec();
-    cout << "time cost:" << end_time - start_time << endl;
+    // double end_time = ros::Time::now().toSec();
+    // cout << "time cost:" << end_time - start_time << endl;
 }
 
 void RSM_using_DROD_::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg)

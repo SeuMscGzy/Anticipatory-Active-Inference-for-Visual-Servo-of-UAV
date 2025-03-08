@@ -22,7 +22,7 @@ int main(int argc, char **argv)
     L << -20, -100;
     double T_s = 0.06;
     double T_delay = 0.06;
-    double T_c = 0.001;
+    double T_c = 0.01;
     int Np = static_cast<int>(T_s / T_c);
     int N_delay = static_cast<int>(T_delay / T_c);
     int N_minus = Np - N_delay;

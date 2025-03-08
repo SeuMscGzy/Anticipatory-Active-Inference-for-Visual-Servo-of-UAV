@@ -408,6 +408,7 @@ public:
                     {
                         cout << ids.size() << " " << ids[0] << endl;
                         cout << "Position_after: " << Position_after.transpose() << endl;
+                        cout << count_for_overtime << endl;
                     }
                     loop++;
                     if (loop == 11)

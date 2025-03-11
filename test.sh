@@ -1,6 +1,6 @@
 sudo chmod 777 /dev/ttyACM0 & sleep 1;
 #source ~/test_ws/devel/setup.bash 
-#roscore & sleep 1;
+roscore & sleep 1;
 
 #动捕节点
 #roslaunch vrpn_client_ros sample.launch server:=192.168.0.200 & sleep 2;

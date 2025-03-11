@@ -6,7 +6,7 @@ RSM_using_DROD_::RSM_using_DROD_()
       tag_x_real(0.0),
       tag_y_real(0.0),
       tag_z_real(0.0),
-      drod(nh, 0.06, 0.058, 0.02),
+      drod(nh, 0.06, 0.058, 0.02, 9),
       uav_x(0.0),
       uav_y(0.0),
       uav_z(0.0),
@@ -67,8 +67,7 @@ void RSM_using_DROD_::function(bool loss_or_not_)
     if (first_time_in_fun)
     {
         first_time_in_fun = false;
-        drod.z_future[0] << tag_x_real, 0, tag_y_real, 0, tag_z_real, 0;
-        drod.z_future_dt[0] << tag_x_real, 0, tag_y_real, 0, tag_z_real, 0;
+        drod.init(Measure_xyz);
         filter.x_hat << tag_x_real, 0, 0, tag_y_real, 0, 0, tag_z_real, 0, 0;
         filter_delay.x_hat << tag_x_real, 0, 0, tag_y_real, 0, 0, tag_z_real, 0, 0;
     }
@@ -105,7 +104,8 @@ void RSM_using_DROD_::function(bool loss_or_not_)
                 state_pre_drod_temp << drod.z_future_dt[timer_count](0), drod.z_future_dt[timer_count](1), drod.z_future_dt[timer_count](2),
                     drod.z_future_dt[timer_count](3), drod.z_future_dt[timer_count](4), drod.z_future_dt[timer_count](5);
                 filter.updateH2(state_pre_drod_temp);
-                cout << filter.x_hat(0) << endl;
+                //cout << drod.z_future_dt[0](0) << endl;
+                //cout << "     "<< endl;
             }
         }
     }

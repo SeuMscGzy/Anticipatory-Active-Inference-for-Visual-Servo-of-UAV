@@ -20,10 +20,15 @@ class DR0D
 {
 public:
     // Constructor to initialize variables
-    DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast);
+    DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast, double poles);
 
     // Method to run the RMS calculation loop
     void run(Vector3d measure_with_delay);
+    void init(Vector3d measure_with_delay);
+    
+    // Method to reset vectors for the next iteration
+    void resetVectors();
+    void resetVectors_past();
 
 private:
     Matrix6d A;          // State matrix
@@ -38,15 +43,12 @@ private:
     int N_cal;                // Number of calculation steps
     int N_delay;               // Number of delay steps
     int N_minus;               // Np - N_delay
+    double poles;               // poles of drod
     vector<Vector3d> yp;         // Vector for intermediate calculations
     vector<Vector6d> z_past;   // Past states
     vector<Vector6d> z_future; // Future states
     vector<Vector6d> z_future_dt; // Future states
     friend class RSM_using_DROD_;
-
-    // Method to reset vectors for the next iteration
-    void resetVectors();
-    void resetVectors_past();
 };
 
 #endif // RMS_H

@@ -33,7 +33,7 @@ public:
         Eigen::Vector2d x(x1, x2);
         // Compute the disturbance d as a sinusoidal function
         double amplitude = 1; // Amplitude of the disturbance
-        double frequency = 1; // Frequency of the disturbance
+        double frequency = 0.6; // Frequency of the disturbance
         double phase = 0.0;   // Phase of the disturbance
         double d = amplitude * sin(2 * M_PI * frequency * ros::Time::now().toSec() + phase);
         auto f = [&](const Eigen::Vector2d &x, double u, double d)
@@ -66,6 +66,7 @@ public:
     double x1;
     double x2;
     double u;
+    double last_x1;
     Eigen::Matrix2d A;
     Eigen::Vector2d B;
     Eigen::RowVector2d C;
@@ -85,20 +86,18 @@ int main(int argc, char **argv)
     ros::Subscriber sub1 = nh.subscribe("/input_x_axis", 1, &Second_order_system::input_callback, &second_order_system1);
     ros::Subscriber sub2 = nh.subscribe("/input_y_axis", 1, &Second_order_system::input_callback, &second_order_system2);
     ros::Subscriber sub3 = nh.subscribe("/input_z_axis", 1, &Second_order_system::input_callback, &second_order_system3);
-    ros::Publisher x_pub = nh.advertise<std_msgs::Float64MultiArray>("/hat_error_xyz", 1);
+    ros::Publisher x_pub = nh.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
+    ros::Publisher real_vx_pub = nh.advertise<std_msgs::Float64MultiArray>("/hat_error_vx", 1);
     int count = 0;
     ros::Rate loop_rate(1.0 / dt);
     while (ros::ok())
     {
-        second_order_system1.update(dt);
-        second_order_system2.update(dt);
-        second_order_system3.update(dt);
-        if (count != 0 && count % 20 == 0)
+        if (count != 0 && count % 60 == 0)
         {
             second_order_system1.print_state();
             second_order_system2.print_state();
             second_order_system3.print_state();
-            std_msgs::Float64MultiArray x_msg;
+            /*std_msgs::Float64MultiArray x_msg;
             x_msg.data.resize(11); // Ensure there is space for two elements
             x_msg.data[0] = second_order_system1.x1;
             x_msg.data[1] = second_order_system1.x2;
@@ -106,15 +105,32 @@ int main(int argc, char **argv)
             x_msg.data[3] = second_order_system2.x2;
             x_msg.data[4] = second_order_system3.x1;
             x_msg.data[5] = second_order_system3.x2;
-            x_msg.data[6] = 0;
-            x_msg.data[7] = 0;
-            x_msg.data[8] = 0;
+            x_msg.data[6] = second_order_system1.x1;
+            x_msg.data[7] = second_order_system2.x1;
+            x_msg.data[8] = second_order_system3.x1;
             x_msg.data[9] = 0;
             x_msg.data[10] = 0;
+            real_x_pub.publish(x_msg);*/
+            std_msgs::Float64MultiArray x_msg;
+            x_msg.data.resize(6); // Ensure there is space for two elements
+            x_msg.data[0] = second_order_system1.x1;
+            x_msg.data[1] = second_order_system2.x1;
+            x_msg.data[2] = second_order_system3.x1;
+            x_msg.data[3] = 0;
+            x_msg.data[4] = 0;
+            x_msg.data[5] = 0;
             x_pub.publish(x_msg);
+            std_msgs::Float64MultiArray vx_msg;
+            vx_msg.data.resize(1); // Ensure there is space for two elements
+            vx_msg.data[0] = second_order_system1.x2;
+            real_vx_pub.publish(vx_msg);
             count = 0;
+            second_order_system1.last_x1 = second_order_system1.x1;
         }
         count++;
+        second_order_system1.update(dt);
+        second_order_system2.update(dt);
+        second_order_system3.update(dt);
         ros::spinOnce();
         loop_rate.sleep();
     }

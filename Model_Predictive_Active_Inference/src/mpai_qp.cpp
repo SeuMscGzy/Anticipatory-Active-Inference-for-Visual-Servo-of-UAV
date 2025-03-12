@@ -27,9 +27,9 @@ Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
     K << 0.8, 0, 0, 0, 0, 0,
         0, 0.8, 0, 0, 0, 0,
         0, 0, 0.8, 0, 0, 0,
-        0, 0, 0, 0.15, 0, 0,
-        0, 0, 0, 0, 0.15, 0,
-        0, 0, 0, 0, 0, 0.15;
+        0, 0, 0, 0.3, 0, 0,
+        0, 0, 0, 0, 0.3, 0,
+        0, 0, 0, 0, 0, 0.3;
     Eigen::MatrixXd Closed_A = Ad - K;
     Eigen::VectorXd zr(6);
     zr << 0, 0, 0, 0, 0, 0;

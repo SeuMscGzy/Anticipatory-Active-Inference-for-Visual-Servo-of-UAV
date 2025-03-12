@@ -45,6 +45,7 @@ private:
     int N_minus;               // Np - N_delay
     double poles;               // poles of drod
     vector<Vector3d> yp;         // Vector for intermediate calculations
+    vector<Vector3d> yp_bar;
     vector<Vector6d> z_past;   // Past states
     vector<Vector6d> z_future; // Future states
     vector<Vector6d> z_future_dt; // Future states

@@ -6,7 +6,7 @@ RSM_using_DROD_::RSM_using_DROD_()
       tag_x_real(0.0),
       tag_y_real(0.0),
       tag_z_real(0.0),
-      drod(nh, 0.06, 0.058, 0.02, 9),
+      drod(nh, 0.06, 0, 0.02, 35),
       uav_x(0.0),
       uav_y(0.0),
       uav_z(0.0),
@@ -70,6 +70,7 @@ void RSM_using_DROD_::function(bool loss_or_not_)
         drod.init(Measure_xyz);
         filter.x_hat << tag_x_real, 0, 0, tag_y_real, 0, 0, tag_z_real, 0, 0;
         filter_delay.x_hat << tag_x_real, 0, 0, tag_y_real, 0, 0, tag_z_real, 0, 0;
+        drod.run(Measure_xyz);
     }
     else
     {
@@ -110,12 +111,19 @@ void RSM_using_DROD_::function(bool loss_or_not_)
         }
     }
     std_msgs::Float64MultiArray msg;
-    msg.data.push_back(filter.x_hat(0) - uav_x);
+    /*msg.data.push_back(filter.x_hat(0) - uav_x);
     msg.data.push_back(filter.x_hat(1) - uav_vx);
     msg.data.push_back(filter.x_hat(3) - uav_y);
     msg.data.push_back(filter.x_hat(4) - uav_vy);
     msg.data.push_back(filter.x_hat(6) - uav_z);
-    msg.data.push_back(filter.x_hat(7) - uav_vz);
+    msg.data.push_back(filter.x_hat(7) - uav_vz);*/
+    cout<<"timer_count: "<<timer_count<<endl;
+    msg.data.push_back(drod.z_future_dt[timer_count](0) - uav_x);
+    msg.data.push_back(drod.z_future_dt[timer_count](1) - uav_vx);
+    msg.data.push_back(drod.z_future_dt[timer_count](2) - uav_y);
+    msg.data.push_back(drod.z_future_dt[timer_count](3) - uav_vy);
+    msg.data.push_back(drod.z_future_dt[timer_count](4) - uav_z);
+    msg.data.push_back(drod.z_future_dt[timer_count](5) - uav_vz);
     msg.data.push_back(tag_x_real - uav_x);
     msg.data.push_back(tag_y_real - uav_y);
     msg.data.push_back(tag_z_real - uav_z);

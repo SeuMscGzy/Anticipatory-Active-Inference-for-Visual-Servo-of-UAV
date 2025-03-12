@@ -14,7 +14,7 @@ using namespace Eigen;
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "RMS");
+    ros::init(argc, argv, "RSM");
     ros::NodeHandle nh("~");
     MatrixXd A(2, 2);
     A << 0, 1, 0, 0;

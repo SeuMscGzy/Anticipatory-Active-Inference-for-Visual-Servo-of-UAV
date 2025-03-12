@@ -32,7 +32,7 @@ public:
         // State-space equations: x_dot = A * x + B * u
         Eigen::Vector2d x(x1, x2);
         // Compute the disturbance d as a sinusoidal function
-        double amplitude = 1; // Amplitude of the disturbance
+        double amplitude = 0; // Amplitude of the disturbance
         double frequency = 0.6; // Frequency of the disturbance
         double phase = 0.0;   // Phase of the disturbance
         double d = amplitude * sin(2 * M_PI * frequency * ros::Time::now().toSec() + phase);

@@ -402,12 +402,13 @@ public:
                     Position_after(0) += 0.00125;
                     Position_after(1) -= 0.03655;
                     Position_after(2) += 0.02884; // 将其转换到imu飞控所在位置
+                    cout << "Position_after: " << Position_after.transpose() << endl;
                     Position_after = R_w2c_temp * Position_after;
                     static int loop = 0;
                     if (loop == 10)
                     {
                         cout << ids.size() << " " << ids[0] << endl;
-                        cout << "Position_after: " << Position_after.transpose() << endl;
+                        //cout << "Position_after: " << Position_after.transpose() << endl;
                         cout << count_for_overtime << endl;
                     }
                     loop++;

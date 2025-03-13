@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   cap_pic_from_cam_srv
 )
+find_package(apriltag REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED) 
 include_directories(include ${OpenCV_INCLUDE_DIRS})
@@ -144,7 +145,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(Relative_Pos_Cal src/Relative_Pos_Cal.cpp)
+add_executable(Relative_Pos_Cal src/Relative_Pos_Cal_apriltag.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -160,6 +161,7 @@ add_executable(Relative_Pos_Cal src/Relative_Pos_Cal.cpp)
 target_link_libraries(Relative_Pos_Cal
    ${catkin_LIBRARIES}
    Eigen3::Eigen
+   apriltag
  )
  target_link_libraries(Relative_Pos_Cal ${OpenCV_LIBS})
  target_link_libraries(Relative_Pos_Cal ${VISP_LIBRARIES})

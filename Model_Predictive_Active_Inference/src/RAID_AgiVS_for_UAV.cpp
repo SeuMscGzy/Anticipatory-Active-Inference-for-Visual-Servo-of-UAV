@@ -53,7 +53,7 @@ void RAID_AgiVS::xyzAxisControlLoop()
             auto end_time = std::chrono::high_resolution_clock::now();
             double elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
             ROS_INFO("Execution time x: %f seconds", elapsed_time);
-            cout<<"optical_xyz: "<<optical_xyz[0]<<" "<<optical_xyz[1]<<" "<<optical_xyz[2]<<endl;
+            //cout<<"optical_xyz: "<<optical_xyz[0]<<" "<<optical_xyz[1]<<" "<<optical_xyz[2]<<endl;
             cout<< xyz_real << endl;
             cout<< xyz_v_real << endl;
             acc_msg.position.x = 0;

@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   quadrotor_msgs
   uav_utils
   pluginlib
+  qpoases_vendor
 )
 find_package(Eigen3 REQUIRED) 
 find_package(NLopt REQUIRED)
@@ -35,8 +36,8 @@ link_directories(/usr/local/lib)
 catkin_package(
   INCLUDE_DIRS
   LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS roscpp
-  px4ctrl quadrotor_msgs uav_utils
+  CATKIN_DEPENDS roscpp 
+  px4ctrl quadrotor_msgs uav_utils 
 )
 
 include_directories(
@@ -48,6 +49,8 @@ include_directories(
   /usr/include/eigen3
 )
 include_directories(${OsqpEigen_INCLUDE_DIRS})
+
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -164,7 +167,8 @@ catkin_package(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(testnode_mpai src/mpai_qp.cpp src/RAID_AgiVS_for_UAV.cpp src/run_RAID_AgiVS_UAV.cpp)
+add_executable(testnode_mpai src/mpai_qpOASES.cpp src/RAID_AgiVS_for_UAV.cpp src/run_RAID_AgiVS_UAV.cpp)
+#add_executable(testnode_mpai src/mpai_qpOASES.cpp)
 #add_executable(testnode_mpai src/mpai_casadi.cpp src/mpai_casadi_qp.cpp src/RAID_AgiVS_for_test.cpp src/run_RAID_AgiVS.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <std_msgs/Float64.h>
-#include "mpai_qp.h"
+//#include "mpai_qp.h"
+#include "mpai_qpOASES.h"
 #include <std_msgs/Int32.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float64MultiArray.h>
@@ -15,9 +16,9 @@ class RAID_AgiVS
 public:
     // parameters and variables for the optimization problem
     double dt = 0.02;
-    int Np = 50;
+    int Np = 100;
     double precice_z1 = 2;
-    double precice_z2 = 0.5;
+    double precice_z2 = 0.3;
     double precice_w1 = 2;
     double precice_w2 = 1;
     double e1 = 2;

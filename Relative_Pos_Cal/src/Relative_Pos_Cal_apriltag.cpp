@@ -79,7 +79,7 @@ public:
     td = apriltag_detector_create();
     apriltag_detector_add_family(td, tf);
     td->quad_decimate = 2.0;
-    td->nthreads = thread::hardware_concurrency();
+    td->nthreads = static_cast<int>(thread::hardware_concurrency());
 
     // 相机初始化重试机制
     bool camera_initialized = false;

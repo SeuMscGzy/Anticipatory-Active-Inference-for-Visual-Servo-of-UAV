@@ -1,6 +1,5 @@
 #include <eigen3/Eigen/Dense>
 #include "ros/ros.h"
-#include <casadi/casadi.hpp>
 #include "std_msgs/Float64.h"
 #include <std_msgs/Float64MultiArray.h>
 #include <vector>

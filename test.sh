@@ -25,13 +25,13 @@ roscore & sleep 1;
 
 #切换无人机跟踪偏置的节点
 #rosrun Keyboard_change_bias Keyboard_change_bias & sleep 1;
-rosrun RSM2 RSM2 & sleep 1;
-rosrun Relative_Pos_Cal Relative_Pos_Cal & sleep 2;
-#rosrun Second_order_system Second_order_system & sleep 1;
+#rosrun RSM2 RSM2 & sleep 1;
+#rosrun Relative_Pos_Cal Relative_Pos_Cal & sleep 2;
+rosrun Second_order_system Second_order_system & sleep 1;
 #数据记录节点
 rosrun record_curves record_curves & sleep 1;
 
-#rosrun Model_Predictive_Active_Inference testnode_mpai & sleep 1;
+rosrun Model_Predictive_Active_Inference testnode_mpai & sleep 1;
 #rosrun video_creater video_creater & sleep 1;
 
 #无人机offboard状态机节点

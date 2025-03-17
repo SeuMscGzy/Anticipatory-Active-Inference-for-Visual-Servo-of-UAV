@@ -22,7 +22,7 @@ using namespace std;
 using namespace std::chrono;
 
 // 常量定义
-constexpr double PROCESSING_LATENCY = 0.040; // 58ms处理延迟
+constexpr double PROCESSING_LATENCY = 0.040; // 40ms处理延迟
 const Eigen::Vector3d t(0, -0.0584, 0);
 const Eigen::Vector3d POS_OFFSET{0.00125, -0.03655, 0.02884};
 constexpr int CAMERA_RETRY_TIMES = 3;
@@ -63,7 +63,7 @@ public:
   unordered_map<int, double> tag_sizes;
 
   ObjectDetector(ros::NodeHandle &nh)
-      : nh_(nh), desired_yaw(0), camera_cap("/dev/video3") {
+      : nh_(nh), desired_yaw(0), camera_cap("/dev/video0") {
     // 参数服务器配置
     double fx, fy, cx, cy;
     nh_.param("/camera/fx", fx, DEFAULT_FX);

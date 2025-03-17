@@ -10,8 +10,8 @@ DR0D::DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay,
       0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0;
 
   L.resize(6, 3);
-  L << -1.8 * poles, 0, 0, -poles * poles, 0, 0, 0, -1.8 * poles, 0, 0,
-      -poles * poles, 0, 0, 0, -1.8 * poles, 0, 0, -poles * poles;
+  L << -2 * poles, 0, 0, -poles * poles, 0, 0, 0, -2 * poles, 0, 0,
+      -poles * poles, 0, 0, 0, -2 * poles, 0, 0, -poles * poles;
 
   C1.resize(3, 6);
   C1 << 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0;
@@ -23,14 +23,14 @@ DR0D::DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay,
   T_f = T_fast;
   T_c = 0.01;
   N_cal = static_cast<int>(T_s / T_c);
-  N_p = static_cast<int>(T_s / T_f);
+  N_p = static_cast<int>((T_s + T_d) / T_f);
   N_delay = static_cast<int>(T_d / T_c);
   N_minus = N_cal - N_delay;
 
-  yp.resize(N_cal);
-  yp_bar.resize(N_cal);
-  z_past.resize(N_cal);
-  z_future.resize(N_cal);
+  yp.resize(N_cal + N_delay);
+  yp_bar.resize(N_cal + N_delay);
+  z_past.resize(N_cal + N_delay);
+  z_future.resize(N_cal + N_delay);
   z_future_dt.resize(N_p + 1);
 
   Vector6d z_temp;
@@ -49,51 +49,21 @@ DR0D::DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay,
 }
 
 // Method to run the DROD calculation loop
-void DR0D::run(Vector3d measure_with_delay) {
-  for (int i = 0; i < N_cal; i++) {
+void DR0D::run(const Vector3d &measure_with_delay) {
+  for (int i = 0; i < N_cal + N_delay; i++) {
     if (i == 0) {
-      yp_bar[i] = measure_with_delay;
-      yp[i] = yp_bar[i];
-      for (int j = N_cal + i - N_delay; j < N_cal; j++) {
-        yp[i] += T_c * C2 * z_past[j];
+      yp[i] = measure_with_delay;
+      for (int j = N_minus; j < N_cal; j++) {
+        yp[0] += T_c * C2 * z_past[j];
       }
-      for (int k = 0; k < i; k++) {
-        yp[i] += T_c * C2 * z_future[k];
-      }
+      z_future[0] = z_past[N_cal - 1] +
+                    T_c * (A * z_past[N_cal - 1] -
+                           L * (yp[0] - C1 * z_past[N_cal - 1]));
     } else {
-      yp_bar[i] = yp_bar[0];
-      if (i <= N_delay) {
-        for (int m = N_minus; m < N_minus + i; m++) {
-          yp_bar[i] += T_c * C2 * z_past[m];
-        }
-        yp[i] = yp_bar[i];
-        for (int j = N_cal + i - N_delay; j < N_cal; j++) {
-          yp[i] += T_c * C2 * z_past[j];
-        }
-        for (int k = 0; k < i; k++) {
-          yp[i] += T_c * C2 * z_future[k];
-        }
-      } else {
-        for (int m = N_minus; m < N_cal; m++) {
-          yp_bar[i] += T_c * C2 * z_past[m];
-        }
-        for (int n = 0; n < i - N_delay; n++) {
-          yp_bar[i] += T_c * C2 * z_future[n];
-        }
-        yp[i] = yp_bar[i];
-        for (int j = i - N_delay; j < i; j++) {
-          yp[i] += T_c * C2 * z_future[j];
-        }
-      }
-    }
-    if (i >= 1) {
+      yp[i] = yp[i - 1] + T_c * C2 * z_future[i - 1];
       z_future[i] =
           z_future[i - 1] +
           T_c * (A * z_future[i - 1] - L * (yp[i] - C1 * z_future[i - 1]));
-    } else {
-      z_future[i] =
-          z_past[N_cal - 1] +
-          T_c * (A * z_past[N_cal - 1] - L * (yp[i] - C1 * z_past[N_cal - 1]));
     }
   }
   int count = static_cast<int>(T_f / T_c);
@@ -111,7 +81,7 @@ void DR0D::run(Vector3d measure_with_delay) {
 void DR0D::resetVectors() {
   Vector6d z_temp;
   z_temp << 0, 0, 0, 0, 0, 0;
-  for (int i = 0; i < N_cal; i++) {
+  for (int i = 0; i < N_cal + N_delay; i++) {
     Vector3d y_temp;
     y_temp << 0, 0, 0;
     yp[i] = y_temp;
@@ -125,7 +95,7 @@ void DR0D::resetVectors() {
 
 // Method to reset vectors for the next iteration
 void DR0D::resetVectors_past() {
-  for (int i = 0; i < N_cal; i++) {
+  for (int i = 0; i < N_cal + N_delay; i++) {
     Vector6d z_temp;
     z_temp << 0, 0, 0, 0, 0, 0;
     z_past[i] = z_temp;
@@ -137,7 +107,7 @@ void DR0D::init(Vector3d measure_with_delay) {
   z_temp << measure_with_delay(0), 0, measure_with_delay(1), 0,
       measure_with_delay(2), 0;
   z_future_dt[0] = z_temp;
-  for (int i = 0; i < N_cal; i++) {
+  for (int i = 0; i < N_cal + N_delay; i++) {
     z_past[i] = z_temp;
     yp[i] = measure_with_delay;
     yp_bar[i] = measure_with_delay;

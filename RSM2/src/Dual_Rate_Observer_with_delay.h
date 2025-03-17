@@ -23,7 +23,7 @@ public:
     DR0D(ros::NodeHandle &nh, double T_sampling, double T_delay, double T_fast, double poles);
 
     // Method to run the RMS calculation loop
-    void run(Vector3d measure_with_delay);
+    void run(const Vector3d& measure_with_delay);
     void init(Vector3d measure_with_delay);
     
     // Method to reset vectors for the next iteration
@@ -42,10 +42,10 @@ private:
     int N_p;                    // Number of steps
     int N_cal;                // Number of calculation steps
     int N_delay;               // Number of delay steps
-    int N_minus;               // Np - N_delay
+    int N_minus;               // Number of steps minus delay steps
     double poles;               // poles of drod
     vector<Vector3d> yp;         // Vector for intermediate calculations
-    vector<Vector3d> yp_bar;
+    vector<Vector3d> yp_bar;     // Vector for intermediate calculations
     vector<Vector6d> z_past;   // Past states
     vector<Vector6d> z_future; // Future states
     vector<Vector6d> z_future_dt; // Future states

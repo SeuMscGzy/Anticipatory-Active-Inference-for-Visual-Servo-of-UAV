@@ -38,7 +38,7 @@ int main(int argc, char **argv)
         z_future[i] = z_temp;
     }
     double t = ros::Time::now().toSec();
-    ros::Rate rate(50 / 3);
+    ros::Rate rate(50.0 / 3);
     while (ros::ok())
     {
         double a = ros::Time::now().toSec() - t;

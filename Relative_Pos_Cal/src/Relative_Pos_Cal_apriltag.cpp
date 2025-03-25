@@ -109,11 +109,10 @@ public:
         "/point_with_fixed_delay", 1, true);
     cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
     odom_sub_ = nh_.subscribe<nav_msgs::Odometry>(
-        "/vins_fusion/imu_propagate", 1, &ObjectDetector::odomCallback, this,
+        "/mavros/local_position/odom", 1, &ObjectDetector::odomCallback, this,
         ros::TransportHints().tcpNoDelay());
     timer = nh_.createTimer(ros::Duration(0.06), &ObjectDetector::timerCallback,
                             this);
-
     worker_thread = thread(&ObjectDetector::processImages, this);
   }
 
@@ -144,6 +143,7 @@ private:
     Eigen::Quaterniond q(
         msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
         msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+    cout << "yaw_imu:" << fromQuaternion2yaw(q) << endl;
     Eigen::Matrix3d R_w2c_temp = q.toRotationMatrix() * R_i2c;
     std::lock_guard<std::mutex> lock(data_mutex);
     R_w2c = R_w2c_temp;
@@ -199,8 +199,15 @@ private:
   }
 
   double fromQuaternion2yaw(const Eigen::Quaterniond &q) {
-    const Eigen::AngleAxisd aa(q);
-    return aa.angle() * (aa.axis().z() < 0 ? -1 : 1);
+    // 提取四元数的各个分量
+    double w = q.w();
+    double x = q.x();
+    double y = q.y();
+    double z = q.z();
+
+    // 计算yaw角
+    double yaw = std::atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+    return yaw;
   }
 
   void processImages() {
@@ -239,8 +246,8 @@ private:
                                      .buf = distorted_image.data};
         zarray_t *raw_detections =
             apriltag_detector_detect(td, &apriltag_image);
-        unique_ptr<zarray_t, decltype(&apriltag_detections_destroy)>
-            detections(raw_detections, apriltag_detections_destroy);
+        unique_ptr<zarray_t, decltype(&apriltag_detections_destroy)> detections(
+            raw_detections, apriltag_detections_destroy);
         // 处理检测结果
         const int detection_count = zarray_size(detections.get());
         ROS_DEBUG_STREAM("Detected tags: " << detection_count);
@@ -282,15 +289,17 @@ private:
         Position_before += POS_OFFSET;
         // 转换到世界坐标系
         Position_after = R_w2c_temp * Position_before;
-        ros::Time image_over_time = ros::Time::now();
-        cout << "time cost:"<< 1000 *(image_over_time.toSec() - image_timestamp.toSec())<< "ms" << endl;
-        cout << "Position_after: "<< Position_after.transpose() << endl;
+        // ros::Time image_over_time = ros::Time::now();
+        // cout << "time cost:"<< 1000 *(image_over_time.toSec() -
+        // image_timestamp.toSec())<< "ms" << endl; cout << "Position_after: "<<
+        // Position_after.transpose() << endl;
         // 计算偏航角
         Eigen::Quaterniond q(R_w2a);
         double yaw = fromQuaternion2yaw(q);
         yaw += M_PI / 2;
         // 更新状态
         desired_yaw = yaw;
+        cout << "yaw: " << yaw << endl;
         lost_target = false;
         // 后续处理
         baseProcess(image_timestamp, false);

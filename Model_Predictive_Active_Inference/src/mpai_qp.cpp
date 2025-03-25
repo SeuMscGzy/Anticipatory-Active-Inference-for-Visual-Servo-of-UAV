@@ -436,6 +436,7 @@ void Optimizer::initsolver()
     SparseMatrix<double> A1(3 * Np + 6, 3 * Np + 6 * (Np + 1));
     // 创建一个容器来存储非零元素
     std::vector<Triplet<double>> triplets;
+    triplets.reserve(3 * Np + 6); // 预分配容量以避免动态调整大小
 
     // 构造 A 矩阵
     for (int i = 0; i < 3 * Np + 6; ++i)

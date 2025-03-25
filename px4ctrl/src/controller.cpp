@@ -339,7 +339,7 @@ bool LinearControl::estimateThrustModel(
       thr2acc_ = thr2acc_ + K * (est_a(2) - thr * thr2acc_);
       P_ = (1 - K * thr) * P_ / rho2_;
     }
-    // cout << thr2acc_ << endl;
+    cout << thr2acc_ << endl;
     return true;
   }
   return false;

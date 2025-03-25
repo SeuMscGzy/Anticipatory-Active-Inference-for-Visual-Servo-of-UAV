@@ -13,10 +13,10 @@ roscore & sleep 1;
 
 #mavrso节点 并提升imu数据频率
 #roslaunch mavros px4.launch & sleep 2;
-#roslaunch mavros px4.launch gcs_url:=udp://@192.168.0.101 & sleep 3;
-#rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0 & sleep 1;
-#rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0 & sleep 1;
-#rosrun mavros mavcmd long 511 32 10000 0 0 0 0 0 & sleep 1;
+roslaunch mavros px4.launch gcs_url:=udp://@192.168.0.100 & sleep 3;
+rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0 & sleep 1;
+rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0 & sleep 1;
+rosrun mavros mavcmd long 511 32 10000 0 0 0 0 0 & sleep 1;
 
 #将视觉定位发送给px4飞控
 #rosrun fake_pose_publisher fake_pose_pub & sleep 1;
@@ -25,13 +25,13 @@ roscore & sleep 1;
 
 #切换无人机跟踪偏置的节点
 #rosrun Keyboard_change_bias Keyboard_change_bias & sleep 1;
-rosrun RSM2 RSM2 & sleep 1;
+#rosrun RSM2 RSM2 & sleep 1;
 #rosrun Relative_Pos_Cal Relative_Pos_Cal & sleep 2;
-rosrun Second_order_system Second_order_system & sleep 1;
+#rosrun Second_order_system Second_order_system & sleep 1;
 #数据记录节点
-rosrun record_curves record_curves & sleep 1;
+#rosrun record_curves record_curves & sleep 1;
 
-rosrun Model_Predictive_Active_Inference testnode_mpai & sleep 1;
+#rosrun Model_Predictive_Active_Inference testnode_mpai & sleep 1;
 #rosrun video_creater video_creater & sleep 1;
 
 #无人机offboard状态机节点

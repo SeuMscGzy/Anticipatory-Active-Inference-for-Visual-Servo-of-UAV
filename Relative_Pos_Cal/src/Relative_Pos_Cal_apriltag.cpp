@@ -200,13 +200,7 @@ private:
 
   double fromQuaternion2yaw(const Eigen::Quaterniond &q) {
     // 提取四元数的各个分量
-    double w = q.w();
-    double x = q.x();
-    double y = q.y();
-    double z = q.z();
-
-    // 计算yaw角
-    double yaw = std::atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+    double yaw = atan2(2 * (q.x() * q.y() + q.w() * q.z()), q.w() * q.w() + q.x() * q.x() - q.y() * q.y() - q.z() * q.z());
     return yaw;
   }
 

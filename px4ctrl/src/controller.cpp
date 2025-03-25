@@ -256,11 +256,11 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   calculateThrustandAcc(u, des_acc);
   double roll, pitch;
   double yaw_odom = fromQuaternion2yaw(odom.q);
+  cout << "yaw_odom: " << yaw_odom << endl;
   double sin = std::sin(yaw_odom);
   double cos = std::cos(yaw_odom);
   roll = (des_acc(0) * sin - des_acc(1) * cos) / param_.gra;
   pitch = (des_acc(0) * cos + des_acc(1) * sin) / param_.gra;
-  // yaw = fromQuaternion2yaw(des.q);
   Eigen::Quaterniond q_des = Eigen::AngleAxisd(des.yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
   u.q = q_des; // MAP(ENU)->IMU(FLU) * IMU(FLU)->MOCAP(FLU) * MOCAP(FLU)->UAV_DES(FLU) = MAP(ENU)->UAV_DES(FLU)
   u.yaw = des.yaw;

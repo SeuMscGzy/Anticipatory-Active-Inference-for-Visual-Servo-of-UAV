@@ -32,7 +32,8 @@ constexpr double DEFAULT_FY = 427.70327;
 constexpr double DEFAULT_CX = 344.18464;
 constexpr double DEFAULT_CY = 255.63631;
 
-class ObjectDetector {
+class ObjectDetector
+{
 public:
   ros::NodeHandle nh_;
   ros::Publisher point_pub_;
@@ -63,7 +64,8 @@ public:
   unordered_map<int, double> tag_sizes;
 
   ObjectDetector(ros::NodeHandle &nh)
-      : nh_(nh), desired_yaw(0), camera_cap("/dev/video0") {
+      : nh_(nh), desired_yaw(0), camera_cap("/dev/video0")
+  {
     // 参数服务器配置
     double fx, fy, cx, cy;
     nh_.param("/camera/fx", fx, DEFAULT_FX);
@@ -83,15 +85,18 @@ public:
 
     // 相机初始化重试机制
     bool camera_initialized = false;
-    for (int retry = 0; retry < CAMERA_RETRY_TIMES; ++retry) {
-      if (camera_cap.init()) {
+    for (int retry = 0; retry < CAMERA_RETRY_TIMES; ++retry)
+    {
+      if (camera_cap.init())
+      {
         camera_initialized = true;
         break;
       }
       ROS_WARN("Camera init retrying...%d", retry + 1);
       ros::Duration(CAMERA_RETRY_INTERVAL).sleep();
     }
-    if (!camera_initialized) {
+    if (!camera_initialized)
+    {
       throw std::runtime_error("Camera initialization failed");
     }
 
@@ -116,30 +121,35 @@ public:
     worker_thread = thread(&ObjectDetector::processImages, this);
   }
 
-  ~ObjectDetector() {
+  ~ObjectDetector()
+  {
     camera_cap.release();
     apriltag_detector_destroy(td);
     tag36h11_destroy(tf);
     stop_thread.store(true, std::memory_order_release);
     cv.notify_all();
-    if (worker_thread.joinable()) {
+    if (worker_thread.joinable())
+    {
       worker_thread.join();
     }
   }
 
-  void start() {
+  void start()
+  {
     ros::spin();
     ros::waitForShutdown();
   }
 
 private:
-  void timerCallback(const ros::TimerEvent &) {
+  void timerCallback(const ros::TimerEvent &)
+  {
     std::lock_guard<std::mutex> lock(data_mutex);
     processing.store(true, std::memory_order_release);
     cv.notify_one();
   }
 
-  void odomCallback(const nav_msgs::Odometry::ConstPtr &msg) {
+  void odomCallback(const nav_msgs::Odometry::ConstPtr &msg)
+  {
     Eigen::Quaterniond q(
         msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
         msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
@@ -151,7 +161,8 @@ private:
 
   // 独立位姿计算函数
   void processSingleTag(apriltag_detection_t *det, Eigen::Matrix3d &R_c2a,
-                        Eigen::Vector3d &position) {
+                        Eigen::Vector3d &position)
+  {
     const double tag_size = tag_sizes.at(det->id);
     const vector<cv::Point3d> obj_pts = {{-tag_size / 2, tag_size / 2, 0},
                                          {tag_size / 2, tag_size / 2, 0},
@@ -165,7 +176,8 @@ private:
 
     cv::Mat rvec, tvec;
     if (!cv::solvePnP(obj_pts, img_pts, cameraMatrix, distCoeffs, rvec, tvec,
-                      false, cv::SOLVEPNP_IPPE_SQUARE)) {
+                      false, cv::SOLVEPNP_IPPE_SQUARE))
+    {
       throw runtime_error("solvePnP failed");
     }
 
@@ -176,10 +188,12 @@ private:
                                tvec.at<double>(2));
   }
 
-  void baseProcess(ros::Time ts, bool is_fault) {
+  void baseProcess(ros::Time ts, bool is_fault)
+  {
     const auto delay =
         ros::Duration(PROCESSING_LATENCY) - (ros::Time::now() - ts);
-    if (delay > ros::Duration(0)) {
+    if (delay > ros::Duration(0))
+    {
       this_thread::sleep_for(
           milliseconds(static_cast<long>(delay.toSec() * 1000)));
     }
@@ -187,7 +201,8 @@ private:
     processing.store(false, std::memory_order_release);
   }
 
-  void publishDetectionResult(ros::Time &ts, bool is_fault) {
+  void publishDetectionResult(ros::Time &ts, bool is_fault)
+  {
     std_msgs::Float64MultiArray msg;
     msg.data = {is_fault ? Position_before.x() : Position_after.x(),
                 is_fault ? Position_before.y() : Position_after.y(),
@@ -198,38 +213,41 @@ private:
     point_pub_.publish(msg);
   }
 
-  double fromQuaternion2yaw(const Eigen::Quaterniond &q) {
-    // 提取四元数的各个分量
-    double yaw = atan2(2 * (q.x() * q.y() + q.w() * q.z()), q.w() * q.w() + q.x() * q.x() - q.y() * q.y() - q.z() * q.z());
-    return yaw;
+  double fromQuaternion2yaw(const Eigen::Quaterniond &q)
+  {
+    return q.toRotationMatrix().eulerAngles(2, 1, 0)[0]; // ZYX顺序，返回yaw
   }
 
-  void processImages() {
-    while (!stop_thread.load(std::memory_order_acquire)) {
+  void processImages()
+  {
+    while (!stop_thread.load(std::memory_order_acquire))
+    {
       Eigen::Matrix3d R_w2c_temp;
       {
         unique_lock<std::mutex> lock(data_mutex);
         // 等待 processing 标志或退出标志
-        cv.wait(lock, [&] {
-          return processing.load(std::memory_order_acquire) ||
-                 stop_thread.load(std::memory_order_acquire);
-        });
+        cv.wait(lock, [&]
+                { return processing.load(std::memory_order_acquire) ||
+                         stop_thread.load(std::memory_order_acquire); });
         if (stop_thread.load(std::memory_order_acquire))
           break;
         // 复制共享变量，然后释放锁
         R_w2c_temp = R_w2c;
       } // 锁在此处释放
-      try {
+      try
+      {
         cv::Mat distorted_image;
         ros::Time image_timestamp = ros::Time::now();
         // 获取图像
         if (!camera_cap.captureImage(distorted_image) ||
-            distorted_image.empty()) {
+            distorted_image.empty())
+        {
           baseProcess(image_timestamp, true);
           continue;
         }
         // 优化图像处理流程
-        if (distorted_image.channels() == 3) {
+        if (distorted_image.channels() == 3)
+        {
           cv::cvtColor(distorted_image, distorted_image, cv::COLOR_BGR2GRAY);
         }
         // AprilTag检测
@@ -249,23 +267,28 @@ private:
         int selected_index = -1;
         bool found_tag1 = false;
         // 第一遍遍历检测结果
-        for (int i = 0; i < detection_count; ++i) {
+        for (int i = 0; i < detection_count; ++i)
+        {
           apriltag_detection_t *det;
           zarray_get(detections.get(), i, &det);
-          if (tag_sizes.find(det->id) == tag_sizes.end()) {
+          if (tag_sizes.find(det->id) == tag_sizes.end())
+          {
             has_invalid_tag = true;
             break;
           }
-          if (det->id == 1) {
+          if (det->id == 1)
+          {
             selected_index = i;
             found_tag1 = true;
             break;
           }
-          if (selected_index == -1) {
+          if (selected_index == -1)
+          {
             selected_index = i;
           }
         }
-        if (has_invalid_tag || detection_count == 0) {
+        if (has_invalid_tag || detection_count == 0)
+        {
           baseProcess(image_timestamp, true);
           continue;
         }
@@ -275,7 +298,8 @@ private:
         processSingleTag(det, R_c2a, Position_before);
         // 坐标系转换（保持原有补偿逻辑）
         R_w2a = R_w2c_temp * R_c2a;
-        if (found_tag1 == true) {
+        if (found_tag1 == true)
+        {
           Eigen::Vector3d t_temp = R_c2a * t;
           Position_before -= t_temp;
         }
@@ -283,10 +307,6 @@ private:
         Position_before += POS_OFFSET;
         // 转换到世界坐标系
         Position_after = R_w2c_temp * Position_before;
-        // ros::Time image_over_time = ros::Time::now();
-        // cout << "time cost:"<< 1000 *(image_over_time.toSec() -
-        // image_timestamp.toSec())<< "ms" << endl; cout << "Position_after: "<<
-        // Position_after.transpose() << endl;
         // 计算偏航角
         Eigen::Quaterniond q(R_w2a);
         double yaw = fromQuaternion2yaw(q);
@@ -297,7 +317,9 @@ private:
         lost_target = false;
         // 后续处理
         baseProcess(image_timestamp, false);
-      } catch (const std::exception &e) {
+      }
+      catch (const std::exception &e)
+      {
         ROS_ERROR_STREAM("Processing error: " << e.what());
         baseProcess(ros::Time::now(), true);
       }
@@ -305,7 +327,8 @@ private:
   }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   ros::init(argc, argv, "object_detector");
   ros::NodeHandle nh;
   ObjectDetector detector(nh);

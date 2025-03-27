@@ -1,7 +1,7 @@
 #include "input.h"
 using namespace std;
 double last_time_defined_by_gzy = 0;
-Eigen::Vector3d last_p(0, 0, 0);
+Vector3d last_p(0, 0, 0);
 RC_Data_t::RC_Data_t()
 {
     rcv_stamp = ros::Time(0);
@@ -85,11 +85,11 @@ void RC_Data_t::feed(mavros_msgs::RCInConstPtr pMsg)
     }
 
     // 3
-    if(reboot_cmd>REBOOT_THRESHOLD_VALUE)
+    if (reboot_cmd > REBOOT_THRESHOLD_VALUE)
     {
         toggle_reboot = true;
     }
-    else 
+    else
     {
         toggle_reboot = false;
     }
@@ -136,8 +136,8 @@ void Odom_Data_t::feed(nav_msgs::OdometryConstPtr pMsg)
 
 // #define VEL_IN_BODY
 #ifdef VEL_IN_BODY /* Set to 1 if the velocity in odom topic is relative to current body frame, not to world frame.*/
-    Eigen::Quaternion<double> wRb_q(msg.pose.pose.orientation.w, msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z);
-    Eigen::Matrix3d wRb = wRb_q.matrix();
+    Quaternion<double> wRb_q(msg.pose.pose.orientation.w, msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z);
+    Matrix3d wRb = wRb_q.matrix();
     v = wRb * v;
 
     static int count = 0;

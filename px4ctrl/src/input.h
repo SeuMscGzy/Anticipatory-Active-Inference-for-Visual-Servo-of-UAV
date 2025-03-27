@@ -3,7 +3,6 @@
 
 #include <ros/ros.h>
 #include <Eigen/Dense>
-
 #include <sensor_msgs/Imu.h>
 #include <quadrotor_msgs/PositionCommand.h>
 #include <quadrotor_msgs/TakeoffLand.h>
@@ -13,7 +12,8 @@
 #include <sensor_msgs/BatteryState.h>
 #include <uav_utils/utils.h>
 #include "PX4CtrlParam.h"
-
+using namespace Eigen;
+using namespace std;
 class RC_Data_t
 {
 public:
@@ -53,10 +53,10 @@ class Odom_Data_t
 {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  Eigen::Vector3d p;
-  Eigen::Vector3d v;
-  Eigen::Quaterniond q;
-  Eigen::Vector3d w;
+  Vector3d p;
+  Vector3d v;
+  Quaterniond q;
+  Vector3d w;
 
   nav_msgs::Odometry msg;
   ros::Time rcv_stamp;
@@ -69,9 +69,9 @@ public:
 class Imu_Data_t
 {
 public:
-  Eigen::Quaterniond q;
-  Eigen::Vector3d w;
-  Eigen::Vector3d a;
+  Quaterniond q;
+  Vector3d w;
+  Vector3d a;
 
   sensor_msgs::Imu msg;
   ros::Time rcv_stamp;
@@ -103,10 +103,10 @@ class Command_Data_t
 {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  Eigen::Vector3d p;
-  Eigen::Vector3d v;
-  Eigen::Vector3d a;
-  Eigen::Vector3d j;
+  Vector3d p;
+  Vector3d v;
+  Vector3d a;
+  Vector3d j;
   double yaw;
   double yaw_rate;
 

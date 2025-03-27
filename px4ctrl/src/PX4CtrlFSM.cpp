@@ -180,9 +180,9 @@ Desired_State_t PX4CtrlFSM::get_hover_des() // 先得到hover_pose,再得到hove
 {
   Desired_State_t des;
   des.p = hover_pose.head<3>();
-  des.v = Eigen::Vector3d::Zero();
-  des.a = Eigen::Vector3d::Zero();
-  des.j = Eigen::Vector3d::Zero();
+  des.v = Vector3d::Zero();
+  des.a = Vector3d::Zero();
+  des.j = Vector3d::Zero();
   des.yaw = hover_pose(3);
   des.yaw_rate = 0.0;
   return des;

@@ -41,7 +41,7 @@ public:
 
 	quadrotor_msgs::Px4ctrlDebug debug_msg; // debug
 
-	Eigen::Vector4d hover_pose;
+	Vector4d hover_pose;
 	ros::Time last_set_hover_pose_time;
 	int loss_target_time_count;
 	enum State_t

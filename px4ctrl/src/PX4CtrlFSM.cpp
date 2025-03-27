@@ -203,7 +203,6 @@ void PX4CtrlFSM::loss_target_callback(
 }
 
 void PX4CtrlFSM::landing_callback(const std_msgs::Bool::ConstPtr &msg) {
-
   in_landing = msg->data;
 }
 
@@ -223,13 +222,10 @@ void PX4CtrlFSM::land_detector(const State_t state, const Desired_State_t &des,
   }
 
   // land_detector parameters
-  constexpr double POSITION_DEVIATION_C =
-      -0.25; // Constraint 1: target position below real position for
+  constexpr double POSITION_DEVIATION_C = -0.25; // Constraint 1: target position below real position for
              // POSITION_DEVIATION_C meters.
-  constexpr double VELOCITY_THR_C =
-      0.1; // Constraint 2: velocity below VELOCITY_MIN_C m/s.
-  constexpr double TIME_KEEP_C =
-      4; // Constraint 3: Time(s) the Constraint 1&2 need to keep.
+  constexpr double VELOCITY_THR_C = 0.1; // Constraint 2: velocity below VELOCITY_MIN_C m/s.
+  constexpr double TIME_KEEP_C = 4; // Constraint 3: Time(s) the Constraint 1&2 need to keep.
 
   static ros::Time time_C12_reached; // time_Constraints12_reached
   static bool is_last_C12_satisfy;

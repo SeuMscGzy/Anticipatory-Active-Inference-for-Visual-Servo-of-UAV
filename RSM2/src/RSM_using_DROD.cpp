@@ -1,5 +1,5 @@
 #include "RSM_using_DROD.h"
-
+const bool trust_gps = 1;
 // 构造函数
 RSM_using_DROD_::RSM_using_DROD_()
     : nh("~"), tag_x_real(0.0), tag_y_real(0.0), tag_z_real(0.0),
@@ -27,18 +27,15 @@ void RSM_using_DROD_::timerCallback(const ros::TimerEvent &) {
 }
 
 void RSM_using_DROD_::Odom_Callback(const nav_msgs::Odometry::ConstPtr &msg) {
-  uav_x = msg->pose.pose.position.x;
-  uav_y = msg->pose.pose.position.y;
-  uav_z = msg->pose.pose.position.z;
-  uav_vx = msg->twist.twist.linear.x;
-  uav_vy = msg->twist.twist.linear.y;
-  uav_vz = msg->twist.twist.linear.z;
-  uav_x = 0;
-  uav_y = 0;
-  uav_z = 0;
-  uav_vx = 0;
-  uav_vy = 0;
-  uav_vz = 0;
+  if(trust_gps)
+  {
+    uav_x = msg->pose.pose.position.x;
+    uav_y = msg->pose.pose.position.y;
+    uav_z = msg->pose.pose.position.z;
+    uav_vx = msg->twist.twist.linear.x;
+    uav_vy = msg->twist.twist.linear.y;
+    uav_vz = msg->twist.twist.linear.z;
+  }
 }
 
 void RSM_using_DROD_::function(bool loss_or_not_) {

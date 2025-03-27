@@ -17,13 +17,6 @@
 #include <std_msgs/Empty.h>
 #include "controller.h"
 #include <std_msgs/Bool.h>
-struct AutoTakeoffLand_t
-{
-	bool landed{true};
-	ros::Time toggle_takeoff_land_time;
-	std::pair<bool, ros::Time> delay_trigger{std::pair<bool, ros::Time>(false, ros::Time(0))};
-	Eigen::Vector4d start_pose;
-};
 
 class PX4CtrlFSM
 {
@@ -36,15 +29,11 @@ public:
 	Imu_Data_t imu_data;
 	Command_Data_t cmd_data;
 	Battery_Data_t bat_data;
-	Takeoff_Land_Data_t takeoff_land_data;
 
 	LinearControl &controller;
 
-	ros::Publisher traj_start_trigger_pub;
-	ros::Publisher state_pub;
-	ros::Publisher ctrl_FCU_pub;
-	ros::Publisher ctrl_FCU_pub_cmd;
-	ros::Publisher ctrl_FCU_pub_land;
+	ros::Publisher ctrl_FCU_pub_att;
+	ros::Publisher ctrl_FCU_pub_acc;
 	ros::Publisher debug_pub; // debug
 	ros::ServiceClient set_FCU_mode_srv;
 	ros::ServiceClient arming_client_srv;
@@ -59,9 +48,7 @@ public:
 	{
 		MANUAL_CTRL = 1, // px4ctrl is deactived. FCU is controled by the remote controller only
 		AUTO_HOVER,		 // px4ctrl is actived, it will keep the drone hover from odom measurments while waiting for commands from PositionCommand topic.
-		CMD_CTRL,		 // px4ctrl is actived, and controling the drone.
-		AUTO_TAKEOFF,
-		AUTO_LAND
+		CMD_CTRL		 // px4ctrl is actived, and controling the drone.
 	};
 
 	PX4CtrlFSM(Parameter_t &, LinearControl &);
@@ -73,30 +60,22 @@ public:
 	bool odom_is_received(const ros::Time &now_time);
 	bool imu_is_received(const ros::Time &now_time);
 	bool bat_is_received(const ros::Time &now_time);
-	bool recv_new_odom();
 	State_t get_state() { return state; }
-	bool get_landed() { return takeoff_land.landed; }
 
 private:
 	bool in_landing = false;
 	State_t state; // Should only be changed in PX4CtrlFSM::process() function!
-	AutoTakeoffLand_t takeoff_land;
 	ros::NodeHandle nh;
 	// ---- control related ----
 	Desired_State_t get_hover_des();
 	Desired_State_t get_cmd_des();
 
-	// ---- auto takeoff/land ----
-	void land_detector(const State_t state, const Desired_State_t &des, const Odom_Data_t &odom); // Detect landing
-
 	// ---- tools ----
 	void set_hov_with_odom();
 	void set_hov_with_rc();
-	void publish_state();
 	bool toggle_offboard_mode(bool on_off); // It will only try to toggle once, so not blocked.
 	bool toggle_arm_disarm(bool arm);		// It will only try to toggle once, so not blocked.
 	void publish_acceleration_ctrl(const Controller_Output_t &u, const ros::Time &stamp);
-	void publish_trigger(const nav_msgs::Odometry &odom_msg);
 };
 
 #endif

@@ -1,7 +1,8 @@
 #include "controller.h"
 #include <Eigen/Core>
 using namespace std;
-int satisfy_times = 0;
+int satisfy_times_takeoff = 0;
+int satisfy_times_on_ground = 0;
 int pos_vel_control_counter = 0; // 位置速度控制器的计数器
 const double dt = 0.02;          // 速度控制循环的时间间隔，50Hz
 double desire_v_x = 0;
@@ -55,8 +56,8 @@ void LinearControl::updateFlightState(const Desired_State_t &des,
   double altitude_diff = odom.p[2] - initial_odom_position[2];
 
   // 输出当前状态和高度差用于调试
-  cout << "Current flight state: " << flight_state << endl;
-  cout << "Altitude difference: " << altitude_diff << endl;
+  //cout << "Current flight state: " << flight_state << endl;
+  //cout << "Altitude difference: " << altitude_diff << endl;
 
   // 根据当前飞行状态更新状态机
   switch (flight_state) {
@@ -67,17 +68,19 @@ void LinearControl::updateFlightState(const Desired_State_t &des,
 
     // 当满足起飞条件：状态采样稳定（state_count ==
     // 2），非降落中，且期望高度大于0.2时
-    if (state_count == 2 && !in_landing_ && des.p[2] > 0.05) {
-      if (satisfy_times < 10) {
-        satisfy_times++; // 累计满足条件的次数
+    if (state_count == 2 && !in_landing_ && des.p[2] > 0.2) {
+      if (satisfy_times_takeoff < 10) {
+        satisfy_times_takeoff++; // 累计满足条件的次数
       } else {
         ROS_INFO("Slow speed up and ready to Takeoff!");
         flight_state = SLOW_START;
+        satisfy_times_on_ground = 0;
       }
     }
     break;
   }
   case SLOW_START: {
+    satisfy_times_on_ground = 0;
     // SLOW_START阶段：等待一定步数以便确认起飞状态
     if (slow_start_step == 200) {
       // 当达到预定步数后，判断是否成功起飞
@@ -90,50 +93,62 @@ void LinearControl::updateFlightState(const Desired_State_t &des,
           ROS_INFO("Takeoff failed due to manual control, please switch to L2 "
                    "Auto Hover mode!");
           flight_state = GROUND;
-          satisfy_times = 0;
+          satisfy_times_takeoff = 0;
         } else if (des.p[2] < -0.2) {
           ROS_INFO("Takeoff canceled!");
           flight_state = GROUND;
-          satisfy_times = 0;
+          satisfy_times_takeoff = 0;
         } else {
-          ROS_INFO("Takeoff failed, start landing! The thrust parameter should "
+          ROS_INFO("Takeoff failed! The thrust parameter should "
                    "be further optimized!");
-          flight_state = LANDING;
+          flight_state = GROUND;
         }
       }
     }
     // 在起飞启动阶段中，如果检测到取消起飞条件，则直接取消起飞
-    else if (des.p[2] < -0.2 && altitude_diff < GROUND_ALTITUDE_THRESHOLD &&
+    else if (des.p[2] <= -0.2 && altitude_diff < GROUND_ALTITUDE_THRESHOLD &&
              state_count == 2) {
       ROS_INFO("Takeoff canceled!");
       flight_state = GROUND;
-      satisfy_times = 0;
+      satisfy_times_takeoff = 0;
     }
     break;
   }
   case FLYING: {
     // 在飞行中，如果收到降落指令或满足降落条件，则启动降落
-    if (in_landing_ ||
-        (des.p[2] <= -0.1 && altitude_diff <= LANDING_ALTITUDE_THRESHOLD &&
-         state_count == 2)) {
+    if (in_landing_) {
       ROS_INFO("Start Landing!");
       flight_state = LANDING;
+    } else if(des.p[2] <= -2 && odom.v[2]>-0.5) 
+    {
+      satisfy_times_on_ground++;
+      if(satisfy_times_on_ground>=10)
+      {
+        ROS_INFO("Landing over during flying state!");
+        flight_state = GROUND;
+        satisfy_times_takeoff = 0;
+      }
     }
-    break;
+    else
+    {
+      satisfy_times_on_ground = 0;
+    }
+      break;
   }
   case LANDING: {
-    // 在降落过程中，判断是否已经落地（高度足够低且land_step达到要求）
-    if (altitude_diff <= GROUND_ALTITUDE_THRESHOLD && land_step == 100) {
+    satisfy_times_on_ground = 0;
+    //专属着陆程序，只为开环速降到平台上，其余着陆均靠遥控器控制
+    if (in_landing_ && land_step == 100) {
       ROS_INFO("Landing completed, already on the ground!");
-      flight_state = GROUND;
-      satisfy_times = 0;
+      satisfy_times_takeoff = 0;
     }
     break;
   }
   default: {
     // 未识别状态，安全起见恢复到地面状态
     flight_state = GROUND;
-    satisfy_times = 0;
+    satisfy_times_takeoff = 0;
+    satisfy_times_on_ground = 0;
     break;
   }
   }
@@ -168,11 +183,7 @@ void LinearControl::calculateThrustandAcc(Controller_Output_t &u,
 
   case FLYING: {
     u.thrust = computeDesiredCollectiveThrustSignal(des_acc);
-    u.acc = des_acc -
-            Eigen::Vector3d(
-                0, 0,
-                param_.gra); // 净加速度
-                             // 而非计算推力时所需要的考虑重力加速度后的加速度。
+    u.acc = des_acc - Eigen::Vector3d(0, 0,param_.gra); // 净加速度而非计算推力时所需要的考虑重力加速度后的加速度。
     break;
   }
 
@@ -180,8 +191,7 @@ void LinearControl::calculateThrustandAcc(Controller_Output_t &u,
     // 平滑减小推力
     if (land_step == 0) // 第一次进入降落状态时，记录悬停推力
     {
-      u.thrust = computeDesiredCollectiveThrustSignal(param_.gra *
-                                                      Eigen::Vector3d(0, 0, 1));
+      u.thrust = last_thrust;
     } else // 从悬停推力开始逐渐减小推力
     {
       u.thrust = last_thrust * 0.95;
@@ -191,6 +201,7 @@ void LinearControl::calculateThrustandAcc(Controller_Output_t &u,
       u.thrust = MIN_THRUST;
     if (land_step > 100) {
       land_step = 100;
+      u.thrust = 0.01;
     }
     break;
   }
@@ -240,16 +251,14 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
                    (des.p[0] - (odom.p[0] - initial_odom_position[0]));
       desire_v_y = position_controller_gain_horizontal *
                    (des.p[1] - (odom.p[1] - initial_odom_position[1]));
-      desire_v_z = position_controller_gain_vertical *
-                   (des.p[2] - (odom.p[2] - initial_odom_position[2]));
       des_acc[0] = velocity_controller_x.update(desire_v_x - odom.v[0]);
       des_acc[1] = velocity_controller_y.update(desire_v_y - odom.v[1]);
-      des_acc[2] = velocity_controller_z.update(desire_v_z - odom.v[2]);
+      des_acc[2] = velocity_controller_z.update(des.p[2] - odom.v[2]); //这里的des.p[2]表示遥控器推力推杆直接映射到期望的速度
       pos_vel_control_counter = 0;
     } else {
       des_acc[0] = velocity_controller_x.update(desire_v_x - odom.v[0]);
       des_acc[1] = velocity_controller_y.update(desire_v_y - odom.v[1]);
-      des_acc[2] = velocity_controller_z.update(desire_v_z - odom.v[2]);
+      des_acc[2] = velocity_controller_z.update(des.p[2] - odom.v[2]);
     }
     pos_vel_control_counter++;
   } else // cmd control

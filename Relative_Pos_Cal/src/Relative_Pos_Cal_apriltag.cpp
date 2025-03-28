@@ -134,7 +134,6 @@ void ObjectDetector::processSingleTag(apriltag_detection_t *det, Eigen::Matrix3d
       {det->p[2][0], det->p[2][1]},
       {det->p[3][0], det->p[3][1]}};
 
-  cv::Mat rvec, tvec;
   if (!cv::solvePnP(obj_pts, img_pts, cameraMatrix, distCoeffs, rvec_, tvec_,
                     false, cv::SOLVEPNP_IPPE_SQUARE))
   {
@@ -144,8 +143,8 @@ void ObjectDetector::processSingleTag(apriltag_detection_t *det, Eigen::Matrix3d
   // 这里尝试原地转换：直接用 rvec 存储旋转矩阵
   cv::Rodrigues(rvec_, rvec_); // rvec 现在存储 3x3 的旋转矩阵
   cv::cv2eigen(rvec_, R_c2a); // 直接转换到 Eigen
-  position = Eigen::Vector3d(tvec.at<double>(0), tvec.at<double>(1),
-                             tvec.at<double>(2));
+  position = Eigen::Vector3d(tvec_.at<double>(0), tvec_.at<double>(1),
+                             tvec_.at<double>(2));
 }
 
 void ObjectDetector::baseProcess(ros::Time ts, bool is_fault)

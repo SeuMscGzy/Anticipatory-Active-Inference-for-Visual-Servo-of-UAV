@@ -2,14 +2,16 @@
 /* Acknowledgement: github.com/uzh-rpg/rpg_quadrotor_control */
 /*************************************************************/
 
-#ifndef __CONTROLLER_H
-#define __CONTROLLER_H
-
+#ifndef CONTROLLER_H_
+#define CONTROLLER_H_
 #include <mavros_msgs/AttitudeTarget.h>
 #include <quadrotor_msgs/Px4ctrlDebug.h>
 #include <queue>
+#include <cmath>
 #include "input.h"
-
+#include <ros/ros.h>
+#include <Eigen/Geometry>
+#include <algorithm>
 struct Desired_State_t
 {
 	Vector3d p;
@@ -19,65 +21,38 @@ struct Desired_State_t
 	Quaterniond q;
 	double yaw;
 	double yaw_rate;
-
-	Desired_State_t() {};
-
-	Desired_State_t(Odom_Data_t &odom)
+	Desired_State_t() = default;
+	explicit Desired_State_t(Odom_Data_t &odom)
 		: p(odom.p), v(Vector3d::Zero()), a(Vector3d::Zero()),
 		  j(Vector3d::Zero()), q(odom.q),
-		  yaw(uav_utils::get_yaw_from_quaternion(odom.q)), yaw_rate(0) {};
+		  yaw(uav_utils::get_yaw_from_quaternion(odom.q)), yaw_rate(0) {}
 };
 
 struct Controller_Output_t
 {
-
-	// Orientation of the body frame with respect to the world frame
 	Quaterniond q;
-
-	// Body rates in body frame
-	Vector3d bodyrates; // [rad/s]
-
-	// Collective mass normalized thrust
+	Vector3d bodyrates;
 	double thrust;
-
-	Vector3d vel; // [rad/s]
-
+	Vector3d vel;
 	Vector3d acc;
-
 	double yaw;
-
 	bool use_attitude_or_acc;
-	// Vector3d des_v_real;
 };
 
 class PIDController
 {
 public:
-	friend class LinearControl;
 	double Kp, Ki, Kd;
 	double integral_error;
-	const double dt = 0.02; // 速度控制循环的时间间隔，50Hz
-
-	PIDController(double Kp_, double Ki_, double Kd_) : integral_error(0)
-	{
-		Kp = Kp_;
-		Ki = Ki_;
-		Kd = Kd_;
-	}
-
+	static constexpr double kDt = 0.02; // 50Hz control loop
+	PIDController(double Kp_, double Ki_, double Kd_)
+		: Kp(Kp_), Ki(Ki_), Kd(Kd_), integral_error(0) {}
 	double update(double error)
 	{
-		integral_error += error * dt;
-		if (abs(integral_error) > 1)
-		{
-			integral_error = 1 * integral_error / abs(integral_error);
-		}
+		integral_error += error * kDt;
+		integral_error = std::clamp(integral_error, -1.0, 1.0);
 		double u_pid = Kp * error + Ki * integral_error;
-		if (abs(u_pid) > 2)
-		{
-			u_pid = 2 * u_pid / abs(u_pid);
-		}
-		return u_pid;
+		return std::clamp(u_pid, -2.0, 2.0);
 	}
 	void init() { integral_error = 0; }
 };
@@ -85,63 +60,86 @@ public:
 class LinearControl
 {
 public:
-	LinearControl(Parameter_t &);
-	enum FlightState
+	friend class PX4CtrlFSM;
+	enum class FlightState
 	{
 		GROUND,
 		SLOW_START,
 		FLYING,
 		LANDING
 	};
-
-	FlightState flight_state = GROUND;
-	Vector3d des_acc = Vector3d(0, 0, 0);
-	bool first_time_in_function = true;
-	Vector3d initial_odom_position = Vector3d(0, 0, 0);
-	int satisfy_times_takeoff = 0;
-	int satisfy_times_on_ground = 0;
-	double altitude_diff = 0;
-	int pos_vel_control_counter = 0;	 // 位置速度控制器的计数器
-	PIDController velocity_controller_x; // x轴速度环PID参数
-	PIDController velocity_controller_y; // y轴速度环PID参数
-	PIDController velocity_controller_z; // z轴速度环PID参数
-	double desire_v_x = 0;
-	double desire_v_y = 0;
-	double desire_v_z = 0;
-	const double position_controller_gain_horizontal = 0.9; // 水平位置比环例控制增益
-	const double position_controller_gain_vertical = 1;		// 水平位置比环例控制增益
-	const double MIN_THRUST = 0.01;
-	const double MAX_THRUST = 0.95;				  // 根据实际最大推力调整
-	const double GROUND_ALTITUDE_THRESHOLD = 0.2; // 离地高度阈值，单位：米
-	double slow_start_step = 0;
-	double land_step = 0;
-	quadrotor_msgs::Px4ctrlDebug
-	calculateControl(const Desired_State_t &des, const Odom_Data_t &odom,
-					 const Imu_Data_t &imu, Controller_Output_t &u,
-					 int state_count, bool in_landing_);
-	void updateFlightState(const Desired_State_t &des, const Odom_Data_t &odom,
-						   int state_count, bool in_landing_);
-	void calculateThrustandAcc(Controller_Output_t &u,
-							   const Vector3d &des_acc);
-	bool estimateThrustModel(const Vector3d &est_v,
-							 const Parameter_t &param);
-	void resetThrustMapping(void);
-
+	// Constants
+	static constexpr double kMinThrust = 0.01;
+	static constexpr double kMaxThrust = 0.95;
+	static constexpr double kGroundAltThreshold = 0.2;
+	static constexpr double kPositionGainHorizontal = 0.9;
+	static constexpr double kPositionGainVertical = 1.0;
+	static constexpr int kSlowStartSteps = 200;
+	static constexpr double kSlowStartFactor = 0.005;
+	static constexpr int kLandingSteps = 100;
+	static constexpr double kRho2 = 0.998;
+	explicit LinearControl(Parameter_t &param);
+	quadrotor_msgs::Px4ctrlDebug calculateControl(
+		const Desired_State_t &des, const Odom_Data_t &odom,
+		const Imu_Data_t &imu, Controller_Output_t &u,
+		int state_count, bool in_landing);
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
 private:
+	// Member variables
 	Parameter_t param_;
 	quadrotor_msgs::Px4ctrlDebug debug_msg_;
-	double last_thrust = 0.01;
-	std::queue<std::pair<ros::Time, double>> timed_thrust_;
-	static constexpr double kMinNormalizedCollectiveThrust_ = 3.0;
+	FlightState flight_state = FlightState::GROUND;
 
-	// Thrust-accel mapping params
-	const double rho2_ = 0.998; // do not change
+	PIDController velocity_controller_x_{2, 0.4, 0};
+	PIDController velocity_controller_y_{2, 0.4, 0};
+	PIDController velocity_controller_z_{4, 2, 0};
+
+	Vector3d des_acc_ = Vector3d::Zero();
+	Vector3d initial_odom_position_ = Vector3d::Zero();
+	double last_thrust_ = kMinThrust;
+	double altitude_diff_ = 0.0;
+
+	int satisfy_times_takeoff_ = 0;
+	int satisfy_times_on_ground_ = 0;
+	int pos_vel_control_counter_ = 0;
+	int slow_start_step_ = 0;
+	int land_step_ = 0;
+
+	double desire_v_x_ = 0;
+	double desire_v_y_ = 0;
+	double desire_v_z_ = 0;
+
 	double thr2acc_;
 	double P_;
+	std::queue<std::pair<ros::Time, double>> timed_thrust_;
+	bool first_time_in_function_ = true;
+	// Private methods
+	void updateFlightState(const Desired_State_t &des, const Odom_Data_t &odom,
+						   int state_count, bool in_landing);
+	void calculateThrustAndAcc(Controller_Output_t &u, const Vector3d &des_acc);
 	double computeDesiredCollectiveThrustSignal(const Vector3d &des_acc);
-	double fromQuaternion2yaw(Quaterniond q);
-};
+	double fromQuaternion2yaw(const Quaterniond &q);
+	bool estimateThrustModel(const Vector3d &est_a, const Parameter_t &param);
+	void resetThrustMapping();
 
-#endif
+	// State handlers
+	void handleGroundState(const Desired_State_t &des, const Odom_Data_t &odom,
+						   int state_count, bool in_landing);
+	void handleSlowStartState(const Desired_State_t &des, const Odom_Data_t &odom,
+							  int state_count);
+	void handleFlyingState(const Desired_State_t &des, const Odom_Data_t &odom, bool in_landing);
+	void handleLandingState(bool in_landing);
+
+	// Control mode handlers
+	void handleManualControl(Controller_Output_t &u);
+	void handleHoverControl(const Desired_State_t &des, const Odom_Data_t &odom,
+							Controller_Output_t &u);
+	void handleCommandControl(const Desired_State_t &des, Controller_Output_t &u);
+
+	// Utility functions
+	void calculateAttitude(const Desired_State_t &des, const Odom_Data_t &odom,
+						   const Vector3d &des_acc, Controller_Output_t &u, int state_count);
+	void updateDebugMsg(const Desired_State_t &des, const Vector3d &des_acc,
+						const Controller_Output_t &u);
+};
+#endif // CONTROLLER_H_

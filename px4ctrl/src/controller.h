@@ -50,9 +50,9 @@ public:
 	double update(double error)
 	{
 		integral_error += error * kDt;
-		integral_error = std::clamp(integral_error, -1.0, 1.0);
+		integral_error = clamp(integral_error, -1.0, 1.0);
 		double u_pid = Kp * error + Ki * integral_error;
-		return std::clamp(u_pid, -2.0, 2.0);
+		return clamp(u_pid, -2.0, 2.0);
 	}
 	void init() { integral_error = 0; }
 };
@@ -94,8 +94,8 @@ private:
 	PIDController velocity_controller_y_{2, 0.4, 0};
 	PIDController velocity_controller_z_{4, 2, 0};
 
-	Vector3d des_acc_ = Vector3d::Zero();
-	Vector3d initial_odom_position_ = Vector3d::Zero();
+	Vector3d des_acc = Vector3d::Zero();
+	Vector3d initial_odom_position = Vector3d::Zero();
 	double last_thrust_ = kMinThrust;
 	double altitude_diff_ = 0.0;
 
@@ -105,19 +105,19 @@ private:
 	int slow_start_step_ = 0;
 	int land_step_ = 0;
 
-	double desire_v_x_ = 0;
-	double desire_v_y_ = 0;
+	double desire_v_x = 0;
+	double desire_v_y = 0;
 	double desire_v_z_ = 0;
 
-	double thr2acc_;
-	double P_;
-	std::queue<std::pair<ros::Time, double>> timed_thrust_;
-	bool first_time_in_function_ = true;
+	double thr2acc;
+	double P;
+	queue<pair<ros::Time, double>> timed_thrust_;
+	bool first_time_in_function = true;
 	// Private methods
 	void updateFlightState(const Desired_State_t &des, const Odom_Data_t &odom,
 						   int state_count, bool in_landing);
-	void calculateThrustAndAcc(Controller_Output_t &u, const Vector3d &des_acc);
-	double computeDesiredCollectiveThrustSignal(const Vector3d &des_acc);
+	void calculateThrustAndAcc(Controller_Output_t &u);
+	double computeDesiredCollectiveThrustSignal();
 	double fromQuaternion2yaw(const Quaterniond &q);
 	bool estimateThrustModel(const Vector3d &est_a, const Parameter_t &param);
 	void resetThrustMapping();
@@ -132,14 +132,12 @@ private:
 
 	// Control mode handlers
 	void handleManualControl(Controller_Output_t &u);
-	void handleHoverControl(const Desired_State_t &des, const Odom_Data_t &odom,
-							Controller_Output_t &u);
-	void handleCommandControl(const Desired_State_t &des, Controller_Output_t &u);
+	void handleHoverControl(const Desired_State_t &des, const Odom_Data_t &odom);
+	void handleCommandControl(const Desired_State_t &des);
 
 	// Utility functions
-	void calculateAttitude(const Desired_State_t &des, const Odom_Data_t &odom,
-						   const Vector3d &des_acc, Controller_Output_t &u, int state_count);
-	void updateDebugMsg(const Desired_State_t &des, const Vector3d &des_acc,
-						const Controller_Output_t &u);
+	void calculateAttitude(double yaw, const Odom_Data_t &odom,
+						   Controller_Output_t &u, int state_count);
+	void updateDebugMsg(const Desired_State_t &des, const Controller_Output_t &u);
 };
 #endif // CONTROLLER_H_

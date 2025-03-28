@@ -11,33 +11,35 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
     const Imu_Data_t &imu, Controller_Output_t &u,
     int state_count, bool in_landing)
 {
-
   // Initialize on first call
-  if (first_time_in_function_)
+  if (first_time_in_function)
   {
-    initial_odom_position_ = odom.p;
-    first_time_in_function_ = false;
+    initial_odom_position = odom.p;
+    first_time_in_function = false;
   }
-  // Handle different control modes
+
+  // Update flight state and calculate outputs------得到飞行状态
+  updateFlightState(des, odom, state_count, in_landing);
+
+  // Handle different control modes------得到des_acc
   if (state_count == 1)
   {
     handleManualControl(u);
   }
   else if (state_count == 2)
   {
-    handleHoverControl(des, odom, u);
+    handleHoverControl(des, odom);
   }
   else
   {
-    handleCommandControl(des, u);
+    handleCommandControl(des);
   }
-  calculateThrustAndAcc(u, des_acc_);
-  calculateAttitude(des, odom, des_acc_, u, state_count);
 
-  // Update flight state and calculate outputs
-  updateFlightState(des, odom, state_count, in_landing);
+  calculateThrustAndAcc(u);//得到推力（对应发送姿态的模式）和期望加速度（对应发送线加速度的模式）
+  calculateAttitude(des.yaw, odom, u, state_count);//得到期望姿态（对应发送姿态的模式）
+
   // Update debug message
-  updateDebugMsg(des, des_acc_, u);
+  updateDebugMsg(des, u);
   return debug_msg_;
 }
 
@@ -45,8 +47,7 @@ void LinearControl::updateFlightState(
     const Desired_State_t &des, const Odom_Data_t &odom,
     int state_count, bool in_landing)
 {
-
-  altitude_diff_ = odom.p[2] - initial_odom_position_[2];
+  altitude_diff_ = odom.p[2] - initial_odom_position[2];
   switch (flight_state)
   {
   case FlightState::GROUND:
@@ -163,9 +164,8 @@ void LinearControl::handleLandingState(bool in_landing)
 }
 
 void LinearControl::calculateThrustAndAcc(
-    Controller_Output_t &u, const Vector3d &des_acc)
+    Controller_Output_t &u)
 {
-
   double desired_thrust = kMinThrust;
   switch (flight_state)
   {
@@ -176,44 +176,42 @@ void LinearControl::calculateThrustAndAcc(
     velocity_controller_z_.init();
     break;
   case FlightState::SLOW_START:
-    desired_thrust = computeDesiredCollectiveThrustSignal(des_acc) *
+    desired_thrust = computeDesiredCollectiveThrustSignal() *
                      slow_start_step_ * kSlowStartFactor;
-    slow_start_step_ = std::min(slow_start_step_ + 1, kSlowStartSteps);
+    slow_start_step_ = min(slow_start_step_ + 1, kSlowStartSteps);
     velocity_controller_x_.init();
     velocity_controller_y_.init();
     velocity_controller_z_.init();
     break;
   case FlightState::FLYING:
-    desired_thrust = computeDesiredCollectiveThrustSignal(des_acc);
+    desired_thrust = computeDesiredCollectiveThrustSignal();
     u.acc = des_acc - Vector3d(0, 0, param_.gra);
     break;
   case FlightState::LANDING:
     desired_thrust = (land_step_ == 0) ? last_thrust_ : last_thrust_ * 0.95;
-    land_step_ = std::min(land_step_ + 1, kLandingSteps);
+    land_step_ = min(land_step_ + 1, kLandingSteps);
     if (land_step_ == kLandingSteps)
     {
       desired_thrust = 0.01;
     }
     break;
   }
-  u.thrust = std::clamp(desired_thrust, kMinThrust, kMaxThrust);
+  u.thrust = clamp(desired_thrust, kMinThrust, kMaxThrust);
   last_thrust_ = u.thrust;
 }
 
 void LinearControl::calculateAttitude(
-    const Desired_State_t &des, const Odom_Data_t &odom,
-    const Vector3d &des_acc, Controller_Output_t &u, int state_count)
+    double yaw, const Odom_Data_t &odom, Controller_Output_t &u, int state_count)
 {
-
   const double yaw_odom = fromQuaternion2yaw(odom.q);
-  const double sin_yaw = std::sin(yaw_odom);
-  const double cos_yaw = std::cos(yaw_odom);
+  const double sin_yaw = sin(yaw_odom);
+  const double cos_yaw = cos(yaw_odom);
   const double roll = (des_acc(0) * sin_yaw - des_acc(1) * cos_yaw) / param_.gra;
   const double pitch = (des_acc(0) * cos_yaw + des_acc(1) * sin_yaw) / param_.gra;
-  u.q = AngleAxisd(des.yaw, Vector3d::UnitZ()) *
+  u.q = AngleAxisd(yaw, Vector3d::UnitZ()) *
         AngleAxisd(pitch, Vector3d::UnitY()) *
         AngleAxisd(roll, Vector3d::UnitX());
-  u.yaw = des.yaw;
+  u.yaw = yaw;
   if (flight_state == FlightState::FLYING && state_count == 2)
   {
     timed_thrust_.emplace(ros::Time::now(), u.thrust);
@@ -233,48 +231,46 @@ void LinearControl::handleManualControl(Controller_Output_t &u)
 }
 
 void LinearControl::handleHoverControl(
-    const Desired_State_t &des, const Odom_Data_t &odom,
-    Controller_Output_t &u)
+    const Desired_State_t &des, const Odom_Data_t &odom)
 {
   if (pos_vel_control_counter_ % 2 == 0)
   {
-    desire_v_x_ = kPositionGainHorizontal *
-                  (des.p[0] - (odom.p[0] - initial_odom_position_[0]));
-    desire_v_y_ = kPositionGainHorizontal *
-                  (des.p[1] - (odom.p[1] - initial_odom_position_[1]));
+    desire_v_x = kPositionGainHorizontal *
+                 (des.p[0] - (odom.p[0] - initial_odom_position[0]));
+    desire_v_y = kPositionGainHorizontal *
+                 (des.p[1] - (odom.p[1] - initial_odom_position[1]));
   }
-  des_acc_[0] = velocity_controller_x_.update(desire_v_x_ - odom.v[0]);
-  des_acc_[1] = velocity_controller_y_.update(desire_v_y_ - odom.v[1]);
-  des_acc_[2] = velocity_controller_z_.update(des.p[2] - odom.v[2]);
+  des_acc[0] = velocity_controller_x_.update(desire_v_x - odom.v[0]);
+  des_acc[1] = velocity_controller_y_.update(desire_v_y - odom.v[1]);
+  des_acc[2] = velocity_controller_z_.update(des.p[2] - odom.v[2]);
   pos_vel_control_counter_++;
-  des_acc_ += Vector3d(0, 0, param_.gra);
+  des_acc += Vector3d(0, 0, param_.gra);
 }
 
 void LinearControl::handleCommandControl(
-    const Desired_State_t &des, Controller_Output_t &u)
+    const Desired_State_t &des)
 {
   velocity_controller_x_.init();
   velocity_controller_y_.init();
   velocity_controller_z_.init();
-  des_acc_ = des.a + Vector3d(0, 0, param_.gra);
+  des_acc = des.a + Vector3d(0, 0, param_.gra);
 }
 
 double LinearControl::fromQuaternion2yaw(const Quaterniond &q)
 {
-  return std::atan2(2 * (q.w() * q.z() + q.x() * q.y()),
+  return atan2(2 * (q.w() * q.z() + q.x() * q.y()),
                     1 - 2 * (q.y() * q.y() + q.z() * q.z()));
 }
 
-double LinearControl::computeDesiredCollectiveThrustSignal(
-    const Vector3d &des_acc)
+double LinearControl::computeDesiredCollectiveThrustSignal()
 {
 
-  if (std::abs(thr2acc_) < 1e-6)
+  if (abs(thr2acc) < 1e-6)
   {
-    ROS_ERROR_THROTTLE(1.0, "Invalid thr2acc_ value: %f", thr2acc_);
+    ROS_ERROR_THROTTLE(1.0, "Invalid thr2acc value: %f", thr2acc);
     return kMinThrust;
   }
-  return des_acc(2) / thr2acc_;
+  return des_acc(2) / thr2acc;
 }
 
 bool LinearControl::estimateThrustModel(const Vector3d &est_a, const Parameter_t &param)
@@ -297,11 +293,11 @@ bool LinearControl::estimateThrustModel(const Vector3d &est_a, const Parameter_t
     timed_thrust_.pop();
     if (thr > 0.01 && flight_state == FlightState::FLYING)
     {
-      const double gamma = 1 / (kRho2 + thr * P_ * thr);
-      const double K = gamma * P_ * thr;
-      thr2acc_ += K * (est_a(2) - thr * thr2acc_);
-      P_ = (1 - K * thr) * P_ / kRho2;
-      ROS_DEBUG("Updated thr2acc: %f", thr2acc_);
+      const double gamma = 1 / (kRho2 + thr * P * thr);
+      const double K = gamma * P * thr;
+      thr2acc += K * (est_a(2) - thr * thr2acc);
+      P = (1 - K * thr) * P / kRho2;
+      ROS_DEBUG("Updated thr2acc: %f", thr2acc);
       return true;
     }
   }
@@ -309,13 +305,12 @@ bool LinearControl::estimateThrustModel(const Vector3d &est_a, const Parameter_t
 }
 void LinearControl::resetThrustMapping()
 {
-  thr2acc_ = param_.gra / param_.thr_map.hover_percentage;
-  P_ = 1e6;
+  thr2acc = param_.gra / param_.thr_map.hover_percentage;
+  P = 1e6;
 }
 
 void LinearControl::updateDebugMsg(
-    const Desired_State_t &des, const Vector3d &des_acc,
-    const Controller_Output_t &u)
+    const Desired_State_t &des, const Controller_Output_t &u)
 {
   // used for debug
   debug_msg_.des_v_x = des.v(0);

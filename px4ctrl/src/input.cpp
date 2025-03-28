@@ -14,7 +14,7 @@ RC_Data_t::RC_Data_t()
     enter_hover_mode = false;
     is_command_mode = true;
     enter_command_mode = false;
-    toggle_reboot = false;
+    toggle_arm = false;
     for (int i = 0; i < 4; ++i)
     {
         ch[i] = 0.0;
@@ -39,7 +39,7 @@ void RC_Data_t::feed(mavros_msgs::RCInConstPtr pMsg)
 
     mode = ((double)msg.channels[5] - 1000.0) / 1000.0;
     gear = ((double)msg.channels[6] - 1000.0) / 1000.0;
-    reboot_cmd = ((double)msg.channels[7] - 1000.0) / 1000.0;
+    arm_cmd = ((double)msg.channels[7] - 1000.0) / 1000.0;
 
     check_validity();
 
@@ -53,10 +53,10 @@ void RC_Data_t::feed(mavros_msgs::RCInConstPtr pMsg)
         have_init_last_gear = true;
         last_gear = gear;
     }
-    if (!have_init_last_reboot_cmd)
+    if (!have_init_last_arm_cmd)
     {
-        have_init_last_reboot_cmd = true;
-        last_reboot_cmd = reboot_cmd;
+        have_init_last_arm_cmd = true;
+        last_arm_cmd = arm_cmd;
     }
 
     // 1
@@ -85,29 +85,29 @@ void RC_Data_t::feed(mavros_msgs::RCInConstPtr pMsg)
     }
 
     // 3
-    if (reboot_cmd > REBOOT_THRESHOLD_VALUE)
+    if (arm_cmd > REBOOT_THRESHOLD_VALUE)
     {
-        toggle_reboot = true;
+        toggle_arm = true;
     }
     else
     {
-        toggle_reboot = false;
+        toggle_arm = false;
     }
 
     last_mode = mode;
     last_gear = gear;
-    last_reboot_cmd = reboot_cmd;
+    last_arm_cmd = arm_cmd;
 }
 
 void RC_Data_t::check_validity()
 {
-    if (mode >= -1.1 && mode <= 1.1 && gear >= -1.1 && gear <= 1.1 && reboot_cmd >= -1.1 && reboot_cmd <= 1.1)
+    if (mode >= -1.1 && mode <= 1.1 && gear >= -1.1 && gear <= 1.1 && arm_cmd >= -1.1 && arm_cmd <= 1.1)
     {
         // pass
     }
     else
     {
-        ROS_ERROR("RC data validity check fail. mode=%f, gear=%f, reboot_cmd=%f", mode, gear, reboot_cmd);
+        ROS_ERROR("RC data validity check fail. mode=%f, gear=%f, arm_cmd=%f", mode, gear, arm_cmd);
     }
 }
 
@@ -150,9 +150,9 @@ void Odom_Data_t::feed(nav_msgs::OdometryConstPtr pMsg)
     static ros::Time last_clear_count_time = ros::Time(0.0);
     if ((now - last_clear_count_time).toSec() > 1.0)
     {
-        if (one_min_count < 100)
+        if (one_min_count < 80)
         {
-            ROS_WARN("ODOM frequency seems lower than 100Hz, which is too low!");
+            ROS_WARN("ODOM frequency seems lower than 80Hz, which is too low!");
         }
         one_min_count = 0;
         last_clear_count_time = now;
@@ -289,17 +289,3 @@ void Battery_Data_t::feed(sensor_msgs::BatteryStateConstPtr pMsg)
     }
 }
 
-Takeoff_Land_Data_t::Takeoff_Land_Data_t()
-{
-    rcv_stamp = ros::Time(0);
-}
-
-void Takeoff_Land_Data_t::feed(quadrotor_msgs::TakeoffLandConstPtr pMsg)
-{
-
-    msg = *pMsg;
-    rcv_stamp = ros::Time::now();
-
-    triggered = true;
-    takeoff_land_cmd = pMsg->takeoff_land_cmd;
-}

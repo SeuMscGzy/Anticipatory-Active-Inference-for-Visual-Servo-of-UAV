@@ -19,13 +19,13 @@ class RC_Data_t
 public:
   double mode;
   double gear;
-  double reboot_cmd;
+  double arm_cmd;
   double last_mode;
   double last_gear;
-  double last_reboot_cmd;
+  double last_arm_cmd;
   bool have_init_last_mode{false};
   bool have_init_last_gear{false};
-  bool have_init_last_reboot_cmd{false};
+  bool have_init_last_arm_cmd{false};
   double ch[4];
 
   mavros_msgs::RCIn msg;
@@ -35,7 +35,7 @@ public:
   bool enter_command_mode;
   bool is_hover_mode;
   bool enter_hover_mode;
-  bool toggle_reboot;
+  bool toggle_arm;
 
   static constexpr double GEAR_SHIFT_VALUE = 0.75;
   static constexpr double API_MODE_THRESHOLD_VALUE = 0.75;
@@ -129,20 +129,6 @@ public:
 
   Battery_Data_t();
   void feed(sensor_msgs::BatteryStateConstPtr pMsg);
-};
-
-class Takeoff_Land_Data_t
-{
-public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  bool triggered{false};
-  uint8_t takeoff_land_cmd; // see TakeoffLand.msg for its defination
-
-  quadrotor_msgs::TakeoffLand msg;
-  ros::Time rcv_stamp;
-
-  Takeoff_Land_Data_t();
-  void feed(quadrotor_msgs::TakeoffLandConstPtr pMsg);
 };
 
 #endif

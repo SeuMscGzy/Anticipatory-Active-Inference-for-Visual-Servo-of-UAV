@@ -89,7 +89,7 @@ void DR0D::run(const Vector3d &measure_with_delay)
       z_future_dt[i] = z_future[count * i - 1];
     }
   }
-  z_past = z_future;
+  z_past.swap(z_future);
 }
 
 // Method to reset vectors for the next iteration

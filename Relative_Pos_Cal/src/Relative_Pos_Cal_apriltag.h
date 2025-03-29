@@ -66,7 +66,6 @@ public:
     // 构造函数与析构函数
     ObjectDetector(ros::NodeHandle &nh);
     ~ObjectDetector();
-
     void start();
 
 private:

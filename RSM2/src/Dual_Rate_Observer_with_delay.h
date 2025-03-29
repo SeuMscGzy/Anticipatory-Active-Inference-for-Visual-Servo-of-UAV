@@ -32,9 +32,13 @@ public:
 
 private:
     Matrix6d A;          // State matrix
+    Matrix6d Tc_times_A;
     Eigen::Matrix<double, 6, 3> L;                // Feedback matrix
+    Eigen::Matrix<double, 6, 3> Tc_times_L;
+    Matrix6d Tc_times_L_C1;
     Eigen::Matrix<double, 3, 6> C1;                // Feedback matrix
     Eigen::Matrix<double, 3, 6> C2;                // Feedback matrix
+    Eigen::Matrix<double, 3, 6> Tc_times_C2;
     double T_s;                // Sample time
     double T_d;            // Delay time
     double T_c;                // Discrete calculation time

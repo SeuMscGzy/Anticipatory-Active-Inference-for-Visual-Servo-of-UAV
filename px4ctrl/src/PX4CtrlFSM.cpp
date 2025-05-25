@@ -40,7 +40,7 @@ void PX4CtrlFSM::process()
   {
   case MANUAL_CTRL:
   {
-    if (rc_data.enter_hover_mode) // Try to jump to AUTO_HOVER
+    if (rc_data.is_hover_mode) // Try to jump to AUTO_HOVER
     {
       if (!odom_is_received(now_time))
       {
@@ -77,7 +77,6 @@ void PX4CtrlFSM::process()
   default:
     break;
   }
-
   // STEP2: solve and update new control commands
   debug_msg = controller.calculateControl(des, u);
   debug_msg.header.stamp = now_time;

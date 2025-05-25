@@ -91,7 +91,7 @@ public:
         return IntegralValue;
     }
 
-    void computeControl(int time_count, double y1_real_slow, double y1_APO_fast, double y2_derivative_sampling, double y2_APO_fast, double &mu_last, double &mu_p_last, double &u_last, double &u, double &mu, double &mu_p, bool use_bias, int which_axis)
+    void computeControl(int time_count, double y1_real_slow, double y1_APO_fast, double y2_derivative_sampling, double y2_APO_fast, double &mu_last, double &mu_p_last, double &u_inte, double &u, double &mu, double &mu_p, bool use_bias, int which_axis)
     {
         y1_APO_fast_bias = adjustBias(y1_APO_fast, which_axis, use_bias);
         y1_real_bias = adjustBias(y1_real_slow, which_axis, use_bias);
@@ -101,9 +101,9 @@ public:
         mu_p = double(mu_p_last + T_c * ((1 - trust_param_y2) * k_l * sigma_z2_inv * (y2_APO_fast - mu_p_last) + trust_param_y2 * k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
         mu_p_last = mu_p;
-        u_last = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu))));
-        u_last = limitIntegral(u_last, which_axis);
-        u = u_last - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling - k_p * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu));
+        u_inte = double(u_inte - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu))));
+        u_inte = limitIntegral(u_inte, which_axis);
+        u = u_inte - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling - k_p * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu));
         u = limitControl(u, which_axis);
     }
 };
@@ -153,7 +153,6 @@ public:
         b1 = 2.0 * a0_temp * (1 - ita * ita);
         b2 = a0_temp * (1 - q * ita + ita * ita);
     }
-
     double filter(double input)
     {
         double output = a0 * input + a1 * prevX1 + a2 * prevX2 - b1 * prevY1 - b2 * prevY2;
@@ -163,7 +162,6 @@ public:
         prevY1 = output;
         return output;
     }
-
     void reset()
     {
         prevX1 = prevX2 = prevY1 = prevY2 = 0;
@@ -176,7 +174,7 @@ private:
     Eigen::Vector2d hat_x_last, hat_x, B_bar, C_bar, B0;
     Eigen::Matrix2d A_bar, A0;
     double u;
-    double u_last;
+    double u_inte;
     double predict_y, y_real, y_real_last;
     double y_real_derivative, y_filtered_deri;
     double mu, mu_p, mu_last, mu_p_last;
@@ -207,7 +205,7 @@ public:
           predict_y(0.0),
           y_real(0.0),
           u(0.0),
-          u_last(0.0),
+          u_inte(0.0),
           y_real_last(0.0),
           y_real_derivative(0.0),
           time_now(0.0),
@@ -294,7 +292,7 @@ public:
             first_time_in_fun = false;
             predict_y = y_real;
             hat_x(0) = y_real;
-            aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
+            aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_inte, u, mu, mu_p, use_bias, which_axis);
         }
         else
         {
@@ -303,7 +301,7 @@ public:
                 predict_y = y_real;
                 u = 0;
                 hat_x = A_bar * hat_x_last + B0 * u + C_bar * predict_y;
-                aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
+                aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_inte, u, mu, mu_p, use_bias, which_axis);
             }
             else
             {
@@ -311,8 +309,7 @@ public:
                 u = 0;
                 predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * u);
                 hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
-                // hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
-                aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
+                aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_inte, u, mu, mu_p, use_bias, which_axis);
             }
         }
         // Update last values for the next iteration
@@ -321,14 +318,9 @@ public:
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
-        if (msg->data != 3) // When not in cmd mode, the control amount is 0.
+        if (msg->data == 1)
         {
-            u = 0;
-            u_last = 0;
-            mu = 0;
-            mu_p = 0;
-            mu_last = 0;
-            mu_p_last = 0;
+            u_inte == 0;
         }
     }
 };
@@ -362,7 +354,7 @@ public:
     {
         // Update the controller for each axis
         des_yaw = msg->data[5];
-        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
+        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 0, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
     }

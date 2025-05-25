@@ -113,7 +113,7 @@ void ObjectDetector::odomCallback(const nav_msgs::Odometry::ConstPtr &msg)
   Eigen::Quaterniond q(
       msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
       msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
-  cout << "yaw_imu:" << fromQuaternion2yaw(q) << endl;
+  //cout << "yaw_imu:" << fromQuaternion2yaw(q) << endl;
   std::lock_guard<std::mutex> lock(data_mutex);
   R_w2c = q.toRotationMatrix() * R_i2c;
 }
@@ -260,14 +260,14 @@ void ObjectDetector::processImages()
       Position_before += POS_OFFSET;
       // 转换到世界坐标系
       Position_after = R_w2c_temp * Position_before;
-      cout << "Position_after: " << Position_after.transpose() << endl;
+      //cout << "Position_after: " << Position_after.transpose() << endl;
       // 计算偏航角
       Eigen::Quaterniond q(R_w2a);
       double yaw = fromQuaternion2yaw(q);
       yaw += M_PI / 2;
       // 更新状态
       desired_yaw = yaw;
-      // cout << "yaw: " << yaw << endl;
+      cout << "yaw: " << yaw << endl;
       lost_target = false;
       // 后续处理
       baseProcess(image_timestamp, false);

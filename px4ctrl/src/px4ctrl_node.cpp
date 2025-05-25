@@ -76,14 +76,6 @@ int main(int argc, char *argv[])
                                                   ros::VoidConstPtr(),
                                                   ros::TransportHints().tcpNoDelay());
 
-    ros::Subscriber landing_sub =
-        nh.subscribe<std_msgs::Bool>("/flight_land",
-                                     1,
-                                     boost::bind(&PX4CtrlFSM::landing_callback, &fsm, _1),
-                                     ros::VoidConstPtr(),
-                                     ros::TransportHints().tcpNoDelay());
-
-    fsm.ctrl_FCU_pub_att = nh.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude", 1);
     fsm.ctrl_FCU_pub_acc = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 1);
     fsm.debug_pub = nh.advertise<quadrotor_msgs::Px4ctrlDebug>("/debugPx4ctrl", 10); // debug
 

@@ -4,7 +4,7 @@ using namespace std;
 using namespace std::chrono;
 
 // 常量定义
-constexpr double PROCESSING_LATENCY = 0.040; // 40ms处理延迟
+constexpr double PROCESSING_LATENCY = 0.035; // 40ms处理延迟
 const Eigen::Vector3d t(0, -0.0584, 0);
 const Eigen::Vector3d POS_OFFSET{0.00125, -0.03655, 0.02884};
 constexpr int CAMERA_RETRY_TIMES = 3;
@@ -78,7 +78,7 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
   point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1, true);
   cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
   odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
-  timer = nh_.createTimer(ros::Duration(0.06), &ObjectDetector::timerCallback, this);
+  timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
   worker_thread = thread(&ObjectDetector::processImages, this);
 }
 
@@ -142,7 +142,7 @@ void ObjectDetector::processSingleTag(apriltag_detection_t *det, Eigen::Matrix3d
 
   // 这里尝试原地转换：直接用 rvec 存储旋转矩阵
   cv::Rodrigues(rvec_, rvec_); // rvec 现在存储 3x3 的旋转矩阵
-  cv::cv2eigen(rvec_, R_c2a); // 直接转换到 Eigen
+  cv::cv2eigen(rvec_, R_c2a);  // 直接转换到 Eigen
   position = Eigen::Vector3d(tvec_.at<double>(0), tvec_.at<double>(1),
                              tvec_.at<double>(2));
 }
@@ -201,6 +201,10 @@ void ObjectDetector::processImages()
         baseProcess(image_timestamp, true);
         continue;
       }
+      std_msgs::Header header;
+      header.stamp = ros::Time::now();
+      sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", distorted_image).toImageMsg();
+      cv_image_pub.publish(msg);
       // AprilTag检测
       image_u8_t apriltag_image = {.width = distorted_image.cols,
                                    .height = distorted_image.rows,
@@ -263,7 +267,7 @@ void ObjectDetector::processImages()
       yaw += M_PI / 2;
       // 更新状态
       desired_yaw = yaw;
-      //cout << "yaw: " << yaw << endl;
+      // cout << "yaw: " << yaw << endl;
       lost_target = false;
       // 后续处理
       baseProcess(image_timestamp, false);

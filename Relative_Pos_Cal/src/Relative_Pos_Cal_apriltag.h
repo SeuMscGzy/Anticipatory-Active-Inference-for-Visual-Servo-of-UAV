@@ -35,6 +35,7 @@
 #include <visp3/core/vpXmlParserCamera.h>
 #include <visp3/core/vpImageTools.h>
 #include <visp3/core/vpImageFilter.h>
+#include <sensor_msgs/Imu.h>
 using namespace std;
 using namespace std::chrono;
 
@@ -74,7 +75,7 @@ public:
 
 private:
     void timerCallback(const ros::TimerEvent &);
-    void odomCallback(const nav_msgs::Odometry::ConstPtr &msg);
+    void odomCallback(const sensor_msgs::Imu::ConstPtr &msg);
     void baseProcess(ros::Time ts, bool is_fault);
     void publishDetectionResult(ros::Time &ts, bool is_fault);
     double fromQuaternion2yaw(const Eigen::Quaterniond &q);

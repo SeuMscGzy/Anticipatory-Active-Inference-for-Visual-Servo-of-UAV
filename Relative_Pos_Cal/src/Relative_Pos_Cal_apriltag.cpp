@@ -47,7 +47,7 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
 {
   config.disable_stream(RS2_STREAM_DEPTH);
   config.disable_stream(RS2_STREAM_INFRARED);
-  config.enable_stream(RS2_STREAM_COLOR, 480, 270, RS2_FORMAT_RGBA8, 30);
+  config.enable_stream(RS2_STREAM_COLOR, 424, 240, RS2_FORMAT_RGBA8, 30);
   g.open(config);
   cam = g.getCameraParameters(RS2_STREAM_COLOR, vpCameraParameters::perspectiveProjWithoutDistortion);
   tag_detector.setAprilTagQuadDecimate(1.5);
@@ -58,15 +58,15 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
 
   Position_before = Eigen::Vector3d::Zero();
   Position_after = Eigen::Vector3d::Zero();
-  R_i2c << 0.00400, -0.03121, 0.99950,
-      -0.99996, 0.00749, 0.00423,
-      -0.00762, -0.99948, -0.03118;
+  R_i2c << 0.00698, -0.99997, 0.00279,
+      -0.99988, -0.00694, 0.01416,
+      -0.01414, -0.00289, -0.99990;
   R_w2c = R_i2c;
   R_c2a = Eigen::Matrix3d::Identity();
   R_w2a = Eigen::Matrix3d::Identity();
 
   point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1, true);
-  odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/mavros/imu/data", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
+  odom_sub_ = nh_.subscribe<sensor_msgs::Imu>("/mavros/imu/data", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
   image_pub = nh.advertise<sensor_msgs::Image>("/camera/image", 1);
   timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
   worker_thread = thread(&ObjectDetector::processImages, this);
@@ -95,11 +95,11 @@ void ObjectDetector::timerCallback(const ros::TimerEvent &)
   cv.notify_one();
 }
 
-void ObjectDetector::odomCallback(const nav_msgs::Odometry::ConstPtr &msg)
+void ObjectDetector::odomCallback(const sensor_msgs::Imu::ConstPtr &msg)
 {
   Eigen::Quaterniond q(
-      msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
-      msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+      msg->orientation.w, msg->orientation.x,
+      msg->orientation.y, msg->orientation.z);
   R_w2c = q.toRotationMatrix() * R_i2c;
 }
 
@@ -171,30 +171,33 @@ void ObjectDetector::processImages()
         Position_before[0] = cMo_vec[0][0][3];
         Position_before[1] = cMo_vec[0][1][3];
         Position_before[2] = cMo_vec[0][2][3];
+        Position_before += POS_OFFSET;
+        Position_after = R_w2c * Position_before;
 
         vpRotationMatrix R_c2a_vp = cMo_vec[0].getRotationMatrix();
         for (int i = 0; i < 3; ++i)
           for (int j = 0; j < 3; ++j)
             R_c2a(i, j) = R_c2a_vp[i][j];
-
         R_w2a = R_w2c * R_c2a;
         Eigen::Vector3d euler = R_w2a.eulerAngles(2, 1, 0);
         double yaw = euler[0];
-        Position_before += POS_OFFSET;
-        Position_after = R_w2c * Position_before;
-
-        desired_yaw = yaw + M_PI_2;
+        desired_yaw = M_PI / 2 + yaw;
         if (desired_yaw > M_PI)
-          desired_yaw -= 2 * M_PI;
+        {
+          desired_yaw -= 2.0 * M_PI;
+        }
+        if (desired_yaw < -M_PI)
+        {
+          desired_yaw += 2.0 * M_PI;
+        }
 
         lost_target = false;
-
-        //cout << "Position_after: " << Position_after.transpose() << endl;
-        //cout << "Desired yaw: " << desired_yaw << endl;
+        // cout << "Position_after: " << Position_after.transpose() << endl;
+        cout << "Desired yaw: " << desired_yaw << endl;
       }
       else
       {
-        //ROS_INFO_STREAM("No tag detected or multiple tags detected.");
+        // ROS_INFO_STREAM("No tag detected or multiple tags detected.");
         lost_target = true;
       }
       baseProcess(image_timestamp, fault_detected);

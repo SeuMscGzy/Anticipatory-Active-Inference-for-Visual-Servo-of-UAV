@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(Relative_Pos_Cal)
-
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
@@ -15,7 +14,6 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   cap_pic_from_cam_srv
 )
-find_package(apriltag REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED) 
 include_directories(include ${OpenCV_INCLUDE_DIRS})

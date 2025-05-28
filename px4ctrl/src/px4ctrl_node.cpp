@@ -76,7 +76,8 @@ int main(int argc, char *argv[])
                                                   ros::VoidConstPtr(),
                                                   ros::TransportHints().tcpNoDelay());
 
-    fsm.ctrl_FCU_pub_acc = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 1);
+    fsm.ctrl_FCU_pub_att = nh.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude", 1);
+    //fsm.ctrl_FCU_pub_acc = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 1);
     fsm.debug_pub = nh.advertise<quadrotor_msgs::Px4ctrlDebug>("/debugPx4ctrl", 10); // debug
 
     fsm.set_FCU_mode_srv = nh.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");

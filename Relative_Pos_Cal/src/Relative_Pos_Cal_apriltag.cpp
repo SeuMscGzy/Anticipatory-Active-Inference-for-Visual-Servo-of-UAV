@@ -216,18 +216,8 @@ void ObjectDetector::processImages()
           for (int j = 0; j < 3; ++j)
             R_c2a(i, j) = R_c2a_vp[i][j];
         R_w2a = R_w2c * R_c2a;
-        Eigen::Vector3d euler = R_w2a.eulerAngles(2, 1, 0);
-        double yaw = euler[0];
-        desired_yaw = M_PI / 2 + yaw;
-        if (desired_yaw > M_PI)
-        {
-          desired_yaw -= 2.0 * M_PI;
-        }
-        if (desired_yaw < -M_PI)
-        {
-          desired_yaw += 2.0 * M_PI;
-        }
-
+        Eigen::Quaterniond q_w2a(R_w2a);
+        desired_yaw = atan2(2 * (q_w2a.w() * q_w2a.z() + q_w2a.x() * q_w2a.y()),1 - 2 * (q_w2a.y() * q_w2a.y() + q_w2a.z() * q_w2a.z())) + M_PI / 2;
         lost_target = false;
         cout << "Position_after: " << Position_after.transpose() << endl;
         cout << "Desired yaw: " << desired_yaw << endl;

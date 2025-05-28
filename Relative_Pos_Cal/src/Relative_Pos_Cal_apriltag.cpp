@@ -45,9 +45,26 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
     : nh_(nh), stop_thread(false), processing(false),
       lost_target(true), desired_yaw(0)
 {
+  rs2::pipeline pipe;
   config.disable_stream(RS2_STREAM_DEPTH);
   config.disable_stream(RS2_STREAM_INFRARED);
-  config.enable_stream(RS2_STREAM_COLOR, 424, 240, RS2_FORMAT_RGBA8, 30);
+  config.enable_stream(RS2_STREAM_COLOR, 480, 270, RS2_FORMAT_RGB8, 30);
+  auto profile = pipe.start(config);
+  // 2. 获取设备和深度传感器（D405 的 ISP 在深度模组内）
+  auto dev = profile.get_device();
+  auto sensor = dev.first<rs2::depth_sensor>();
+  // 3. 关闭自动曝光
+  if (sensor.supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
+    sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
+
+  // 4. 手动设置曝光时间（单位为微秒，范围一般 1–165000 μs）
+  //    默认值约为 33000 μs（33 ms），可根据运动速度和光照条件调小到 5000–10000 μs
+  if (sensor.supports(RS2_OPTION_EXPOSURE))
+    sensor.set_option(RS2_OPTION_EXPOSURE, 3000);
+  // 5. （可选）提高增益以补偿亮度下降
+  if (sensor.supports(RS2_OPTION_GAIN))
+    sensor.set_option(RS2_OPTION_GAIN, 64);
+  pipe.stop();
   g.open(config);
   cam = g.getCameraParameters(RS2_STREAM_COLOR, vpCameraParameters::perspectiveProjWithoutDistortion);
   tag_detector.setAprilTagQuadDecimate(1.5);

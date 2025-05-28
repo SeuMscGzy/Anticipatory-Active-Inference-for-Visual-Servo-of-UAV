@@ -3,37 +3,32 @@
 using namespace std;
 using namespace std::chrono;
 template <typename T>
-void flipImage(vpImage<T> &src, vpImage<T> &dst, int flipCode)
+void rotate90(const vpImage<T> &src, vpImage<T> &dst, bool clockwise)
 {
-  dst.resize(src.getHeight(), src.getWidth());
+  const unsigned int H = src.getHeight();
+  const unsigned int W = src.getWidth();
+  // 旋转后高宽互换
+  dst.resize(W, H);
 
-  if (flipCode == 0)
+  if (clockwise)
   {
-    for (unsigned int i = 0; i < src.getHeight(); ++i)
+    // (i, j) -> (j, H-1-i)
+    for (unsigned int i = 0; i < H; ++i)
     {
-      for (unsigned int j = 0; j < src.getWidth(); ++j)
+      for (unsigned int j = 0; j < W; ++j)
       {
-        dst[src.getHeight() - i - 1][j] = src[i][j];
-      }
-    }
-  }
-  else if (flipCode > 0)
-  {
-    for (unsigned int i = 0; i < src.getHeight(); ++i)
-    {
-      for (unsigned int j = 0; j < src.getWidth(); ++j)
-      {
-        dst[i][src.getWidth() - j - 1] = src[i][j];
+        dst[j][H - 1 - i] = src[i][j];
       }
     }
   }
   else
   {
-    for (unsigned int i = 0; i < src.getHeight(); ++i)
+    // 逆时针: (i, j) -> (W-1-j, i)
+    for (unsigned int i = 0; i < H; ++i)
     {
-      for (unsigned int j = 0; j < src.getWidth(); ++j)
+      for (unsigned int j = 0; j < W; ++j)
       {
-        dst[src.getHeight() - i - 1][src.getWidth() - j - 1] = src[i][j];
+        dst[W - 1 - j][i] = src[i][j];
       }
     }
   }
@@ -43,12 +38,12 @@ constexpr double PROCESSING_LATENCY = 0.04; // 40ms处理延迟
 const Eigen::Vector3d POS_OFFSET{0.00625, -0.08892, 0.06430};
 ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
     : nh_(nh), stop_thread(false), processing(false),
-      lost_target(true), desired_yaw(0)
+      lost_target(true), desired_yaw(0), clockwise(true)
 {
   rs2::pipeline pipe;
   config.disable_stream(RS2_STREAM_DEPTH);
   config.disable_stream(RS2_STREAM_INFRARED);
-  config.enable_stream(RS2_STREAM_COLOR, 480, 270, RS2_FORMAT_RGB8, 30);
+  config.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_RGB8, 30);
   auto profile = pipe.start(config);
   // 2. 获取设备和深度传感器（D405 的 ISP 在深度模组内）
   auto dev = profile.get_device();
@@ -67,7 +62,33 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
   pipe.stop();
   g.open(config);
   cam = g.getCameraParameters(RS2_STREAM_COLOR, vpCameraParameters::perspectiveProjWithoutDistortion);
-  tag_detector.setAprilTagQuadDecimate(1.5);
+  // 假设原 cam 已经由 g.getCameraParameters(...) 构造
+  double fx = cam.get_px();
+  double fy = cam.get_py();
+  double u0 = cam.get_u0();
+  double v0 = cam.get_v0();
+  unsigned int W = 640; // 旋转前宽度
+  unsigned int H = 360; // 旋转前高度
+
+  if (clockwise)
+  {
+    // 顺时针 90°
+    cam_rot.initPersProjWithoutDistortion(
+        /*fx=*/fy,
+        /*fy=*/fx,
+        /*u0=*/(double)(H - 1) - v0,
+        /*v0=*/u0);
+  }
+  else
+  {
+    // 逆时针 90°
+    cam_rot.initPersProjWithoutDistortion(
+        /*fx=*/fy,
+        /*fy=*/fx,
+        /*u0=*/v0,
+        /*v0=*/(double)(W - 1) - u0);
+  }
+  tag_detector.setAprilTagQuadDecimate(2);
   tag_detector.setAprilTagPoseEstimationMethod(vpDetectorAprilTag::HOMOGRAPHY_VIRTUAL_VS);
   tag_detector.setAprilTagNbThreads(4);
   tag_detector.setAprilTagFamily(vpDetectorAprilTag::TAG_36h11);
@@ -168,9 +189,9 @@ void ObjectDetector::processImages()
       vpImage<unsigned char> I;
       g.acquire(I);
       ros::Time image_timestamp = ros::Time::now();
-      /*vpImage<unsigned char> flippedImage;
-      flipImage(I, flippedImage, -1);
-      I = flippedImage;*/
+      vpImage<unsigned char> flippedImage;
+      rotate90(I, flippedImage, clockwise);
+      I = flippedImage;
       cv::Mat imageMat;
       vpImageConvert::convert(I, imageMat);
       std_msgs::Header header;
@@ -178,11 +199,10 @@ void ObjectDetector::processImages()
       sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
       image_pub.publish(msg);
       std::vector<vpHomogeneousMatrix> cMo_vec;
-      tag_detector.detect(I, 0.0795, cam, cMo_vec);
-      ros::Time detection_time = ros::Time::now();
-      cout << "Detection time: " << detection_time.toSec() - image_timestamp.toSec() << " seconds." << endl;
+      tag_detector.detect(I, 0.0795, cam_rot, cMo_vec);
+      // ros::Time detection_time = ros::Time::now();
+      // cout << "Detection time: " << detection_time.toSec() - image_timestamp.toSec() << " seconds." << endl;
       bool fault_detected = (cMo_vec.size() != 1);
-
       if (!fault_detected)
       {
         Position_before[0] = cMo_vec[0][0][3];
@@ -209,7 +229,7 @@ void ObjectDetector::processImages()
         }
 
         lost_target = false;
-        // cout << "Position_after: " << Position_after.transpose() << endl;
+        cout << "Position_after: " << Position_after.transpose() << endl;
         cout << "Desired yaw: " << desired_yaw << endl;
       }
       else

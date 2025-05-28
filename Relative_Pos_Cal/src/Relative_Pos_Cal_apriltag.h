@@ -62,10 +62,12 @@ public:
     Eigen::Matrix3d R_i2c;
     Eigen::Matrix3d R_w2c;
     Eigen::Matrix3d R_w2a;
+    bool clockwise = true;
 
     vpRealSense2 g;
     rs2::config config;
     vpCameraParameters cam;
+    vpCameraParameters cam_rot;
     vpDetectorAprilTag tag_detector;
 
     std_msgs::Float64MultiArray point_;

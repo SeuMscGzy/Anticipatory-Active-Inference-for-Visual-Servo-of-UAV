@@ -44,7 +44,7 @@ class PIDController
 public:
 	double Kp, Ki, Kd;
 	double integral_error;
-	static constexpr double kDt = 0.02; // 50Hz control loop
+	static constexpr double kDt = 0.01; // 100Hz control loop2
 	PIDController(double Kp_, double Ki_, double Kd_)
 		: Kp(Kp_), Ki(Ki_), Kd(Kd_), integral_error(0) {}
 	double update(double error)

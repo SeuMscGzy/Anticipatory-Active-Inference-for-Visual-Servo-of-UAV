@@ -156,7 +156,7 @@ void PX4CtrlFSM::process()
   }
 
   // STEP3: estimate thrust model
-  if (state == AUTO_HOVER)
+  if (state == AUTO_HOVER || state == CMD_CTRL)
   {
     controller.estimateThrustModel(imu_data.a, param);
   }

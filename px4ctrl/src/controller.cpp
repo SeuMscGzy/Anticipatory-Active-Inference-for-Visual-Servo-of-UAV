@@ -18,9 +18,6 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
     first_time_in_function = false;
   }
 
-  // Update flight state and calculate outputs------得到飞行状态
-  updateFlightState(des, odom, state_count);
-
   // Handle different control modes------得到des_acc
   if (state_count == 1)
   {
@@ -28,6 +25,8 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
   }
   else if (state_count == 2)
   {
+    // Update flight state and calculate outputs------得到飞行状态
+    updateFlightState(des, odom);
     handleHoverControl(des, odom);
   }
   else
@@ -35,8 +34,8 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
     handleCommandControl(des);
   }
 
-  calculateAttitude(des.yaw, odom, u, state_count); // 得到期望姿态（对应发送姿态的模式）
-  calculateThrust(u);                               // 得到推力（对应发送姿态的模式）和期望加速度（对应发送线加速度的模式）
+  calculateAttitude(des.yaw, odom, u); // 得到期望姿态（对应发送姿态的模式）
+  calculateThrust(u);                  // 得到推力（对应发送姿态的模式）和期望加速度（对应发送线加速度的模式）
 
   // Update debug message
   updateDebugMsg(des, u);
@@ -44,96 +43,66 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
 }
 
 void LinearControl::updateFlightState(
-    const Desired_State_t &des, const Odom_Data_t &odom,
-    int state_count)
+    const Desired_State_t &des, const Odom_Data_t &odom)
 {
   altitude_diff_ = odom.p[2] - initial_odom_position[2];
   switch (flight_state)
   {
   case FlightState::GROUND:
-    handleGroundState(des, odom, state_count);
-    break;
-  case FlightState::SLOW_START:
-    handleSlowStartState(des, odom, state_count);
-    break;
-  case FlightState::FLYING:
-    handleFlyingState(des, odom, state_count);
-    break;
-  }
-}
-
-void LinearControl::handleGroundState(
-    const Desired_State_t &des, const Odom_Data_t &odom,
-    int state_count)
-{
-  slow_start_step_ = 0;
-  if (state_count == 2 && des.p[2] > 0.2)
-  {
-    if (satisfy_times_takeoff_ < 10)
+    if (des.p[2] > 0.2)
     {
-      satisfy_times_takeoff_++;
+      if (satisfy_times_takeoff_ < 10)
+      {
+        satisfy_times_takeoff_++;
+      }
+      else
+      {
+        ROS_INFO("Slow speed up and ready to Takeoff!");
+        flight_state = FlightState::SLOW_START;
+        slow_start_step_ = 0;
+        satisfy_times_on_ground_ = 0;
+      }
     }
     else
     {
-      ROS_INFO("Slow speed up and ready to Takeoff!");
-      flight_state = FlightState::SLOW_START;
-      slow_start_step_ = 0;
-      satisfy_times_on_ground_ = 0;
+      satisfy_times_takeoff_ = 0;
     }
-  }
-  else
-  {
-    satisfy_times_takeoff_ = 0;
-  }
-}
-
-void LinearControl::handleSlowStartState(
-    const Desired_State_t &des, const Odom_Data_t &odom,
-    int state_count)
-{
-  satisfy_times_on_ground_ = 0;
-  if (slow_start_step_ == kSlowStartSteps)
-  {
-    if (altitude_diff_ > kGroundAltThreshold && state_count == 2)
+    break;
+  case FlightState::SLOW_START:
+    if (slow_start_step_ == kSlowStartSteps)
     {
       ROS_INFO("Takeoff completed, already in the air!");
       flight_state = FlightState::FLYING;
+      slow_start_step_ = 0;
     }
     else
     {
-      ROS_WARN("Takeoff failed or cancelled!");
-      flight_state = FlightState::GROUND;
-      satisfy_times_takeoff_ = 0;
+      slow_start_step_++;
+      if (des.p[2] < -0.2)
+      {
+        ROS_WARN("Takeoff cancelled during slow start!");
+        flight_state = FlightState::GROUND;
+        satisfy_times_takeoff_ = 0;
+        slow_start_step_ = 0;
+      }
     }
-  }
-  else
-  {
-    if (state_count != 2 || des.p[2] < -0.2)
+    break;
+  case FlightState::FLYING:
+    if (des.p[2] <= -2 && odom.v[2] > -0.5 && abs(odom.v[0] < 0.2) && abs(odom.v[1] < 0.2))
     {
-      ROS_WARN("Takeoff cancelled during slow start!");
-      flight_state = FlightState::GROUND;
-      satisfy_times_takeoff_ = 0;
-      slow_start_step_ = 0;
+      satisfy_times_on_ground_++;
+      if (satisfy_times_on_ground_ >= 10)
+      {
+        ROS_INFO("Landing over during flying state!");
+        flight_state = FlightState::GROUND;
+        satisfy_times_takeoff_ = 0;
+      }
     }
-  }
-}
-
-void LinearControl::handleFlyingState(
-    const Desired_State_t &des, const Odom_Data_t &odom, int state_count)
-{
-  if (des.p[2] <= -2 && odom.v[2] > -0.5 && abs(odom.v[0] < 0.2) && abs(odom.v[1] < 0.2) && state_count == 2)
-  {
-    satisfy_times_on_ground_++;
-    if (satisfy_times_on_ground_ >= 10)
+    else
     {
-      ROS_INFO("Landing over during flying state!");
-      flight_state = FlightState::GROUND;
-      satisfy_times_takeoff_ = 0;
+      satisfy_times_on_ground_ = 0;
     }
-  }
-  else
-  {
-    satisfy_times_on_ground_ = 0;
+    break;
   }
 }
 
@@ -171,30 +140,7 @@ void LinearControl::handleCommandControl(
   des_acc = des.a + Vector3d(0, 0, param_.gra);
 }
 
-void LinearControl::calculateThrust(
-    Controller_Output_t &u)
-{
-  double desired_thrust = kMinThrust;
-  switch (flight_state)
-  {
-  case FlightState::GROUND:
-    desired_thrust = kMinThrust;
-    break;
-  case FlightState::SLOW_START:
-    desired_thrust = computeDesiredCollectiveThrustSignal() *
-                     slow_start_step_ * kSlowStartFactor;
-    slow_start_step_ = min(slow_start_step_ + 1, kSlowStartSteps);
-    break;
-  case FlightState::FLYING:
-    desired_thrust = computeDesiredCollectiveThrustSignal();
-    break;
-  }
-  u.thrust = clamp(desired_thrust, kMinThrust, kMaxThrust);
-  last_thrust_ = u.thrust;
-}
-
-void LinearControl::calculateAttitude(
-    double yaw, const Odom_Data_t &odom, Controller_Output_t &u, int state_count)
+void LinearControl::calculateAttitude(double yaw, const Odom_Data_t &odom, Controller_Output_t &u)
 {
   const double yaw_odom = fromQuaternion2yaw(odom.q);
   const double sin_yaw = sin(yaw_odom);
@@ -255,6 +201,25 @@ void LinearControl::calculateAttitude(
       timed_thrust_.pop();
     }
   }
+}
+
+void LinearControl::calculateThrust(Controller_Output_t &u)
+{
+  double desired_thrust = kMinThrust;
+  switch (flight_state)
+  {
+  case FlightState::GROUND:
+    desired_thrust = kMinThrust;
+    break;
+  case FlightState::SLOW_START:
+    desired_thrust = computeDesiredCollectiveThrustSignal() *
+                     slow_start_step_ * kSlowStartFactor;
+    break;
+  case FlightState::FLYING:
+    desired_thrust = computeDesiredCollectiveThrustSignal();
+    break;
+  }
+  u.thrust = clamp(desired_thrust, kMinThrust, kMaxThrust);
 }
 
 double LinearControl::fromQuaternion2yaw(const Quaterniond &q)

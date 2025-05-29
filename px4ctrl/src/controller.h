@@ -114,26 +114,19 @@ private:
 	queue<pair<ros::Time, double>> timed_thrust_;
 	bool first_time_in_function = true;
 	// Private methods
-	void updateFlightState(const Desired_State_t &des, const Odom_Data_t &odom,
-						   int state_count);
 	double computeDesiredCollectiveThrustSignal();
 	double fromQuaternion2yaw(const Quaterniond &q);
 	bool estimateThrustModel(const Vector3d &est_a, const Parameter_t &param);
 	void resetThrustMapping();
 
-	// State handlers
-	void handleGroundState(const Desired_State_t &des, const Odom_Data_t &odom, int state_count);
-	void handleSlowStartState(const Desired_State_t &des, const Odom_Data_t &odom, int state_count);
-	void handleFlyingState(const Desired_State_t &des, const Odom_Data_t &odom, int state_count);
-
 	// Control mode handlers
+	void updateFlightState(const Desired_State_t &des, const Odom_Data_t &odom);
 	void handleManualControl();
 	void handleHoverControl(const Desired_State_t &des, const Odom_Data_t &odom);
 	void handleCommandControl(const Desired_State_t &des);
 	void calculateThrust(Controller_Output_t &u);
 	// Utility functions
-	void calculateAttitude(double yaw, const Odom_Data_t &odom,
-						   Controller_Output_t &u, int state_count);
+	void calculateAttitude(double yaw, const Odom_Data_t &odom, Controller_Output_t &u);
 	void updateDebugMsg(const Desired_State_t &des, const Controller_Output_t &u);
 };
 #endif // CONTROLLER_H_

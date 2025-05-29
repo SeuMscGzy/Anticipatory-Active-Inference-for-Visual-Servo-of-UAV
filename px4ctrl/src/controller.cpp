@@ -33,7 +33,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
   {
     handleCommandControl(des);
   }
-
+  cout << "flight_state: " << static_cast<int>(flight_state) << endl;
   calculateAttitude(des.yaw, odom, u); // 得到期望姿态（对应发送姿态的模式）
   calculateThrust(u);                  // 得到推力（对应发送姿态的模式）和期望加速度（对应发送线加速度的模式）
 
@@ -45,13 +45,12 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(
 void LinearControl::updateFlightState(
     const Desired_State_t &des, const Odom_Data_t &odom)
 {
-  altitude_diff_ = odom.p[2] - initial_odom_position[2];
   switch (flight_state)
   {
   case FlightState::GROUND:
     if (des.p[2] > 0.2)
     {
-      if (satisfy_times_takeoff_ < 10)
+      if (satisfy_times_takeoff_ < 100)
       {
         satisfy_times_takeoff_++;
       }
@@ -91,7 +90,7 @@ void LinearControl::updateFlightState(
     if (des.p[2] <= -2 && odom.v[2] > -0.5 && abs(odom.v[0] < 0.2) && abs(odom.v[1] < 0.2))
     {
       satisfy_times_on_ground_++;
-      if (satisfy_times_on_ground_ >= 10)
+      if (satisfy_times_on_ground_ >= 500)
       {
         ROS_INFO("Landing over during flying state!");
         flight_state = FlightState::GROUND;
@@ -175,7 +174,7 @@ void LinearControl::calculateAttitude(double yaw, const Odom_Data_t &odom, Contr
   b3_in_world = R_w2i.col(2);
   des_acc_SE3 = des_acc.dot(b3_in_world);
   double thrust_z = des_acc_SE3 / thr2acc * b3_in_world[2];
-  cout << "stable hovering thrust" << des_acc[2] << "SE3 thrust: " << des_acc_SE3 << endl;
+  cout << "thrust error" << des_acc[2] - des_acc_SE3 << endl;
 
   // 测试两种姿态解算方法的一致性
   //  1. 相对四元数

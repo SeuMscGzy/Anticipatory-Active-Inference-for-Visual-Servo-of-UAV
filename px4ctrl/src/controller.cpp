@@ -148,14 +148,14 @@ void LinearControl::handleCommandControl(
 
 void LinearControl::calculateAttitude(double yaw, const Odom_Data_t &odom, Controller_Output_t &u)
 {
-  const double yaw_odom = fromQuaternion2yaw(odom.q);
-  const double sin_yaw = sin(yaw_odom);
-  const double cos_yaw = cos(yaw_odom);
+  /*const double yaw_odom = fromQuaternion2yaw(odom.q);
+  const double sin_yaw = sin(yaw);
+  const double cos_yaw = cos(yaw);
   const double roll = (des_acc(0) * sin_yaw - des_acc(1) * cos_yaw) / param_.gra;
   const double pitch = (des_acc(0) * cos_yaw + des_acc(1) * sin_yaw) / param_.gra;
   u.q = AngleAxisd(yaw, Vector3d::UnitZ()) *
         AngleAxisd(pitch, Vector3d::UnitY()) *
-        AngleAxisd(roll, Vector3d::UnitX());
+        AngleAxisd(roll, Vector3d::UnitX());*/
 
   // SE(3)
   //  3) 期望姿态
@@ -173,32 +173,18 @@ void LinearControl::calculateAttitude(double yaw, const Odom_Data_t &odom, Contr
   R_w2i = odom.q.toRotationMatrix(); // 传感器到世界坐标系的旋转矩阵
   b3_in_world = R_w2i.col(2);
   des_acc_SE3 = des_acc.dot(b3_in_world);
-  double thrust_z = des_acc_SE3 / thr2acc * b3_in_world[2];
-  cout << "thrust error" << des_acc[2] - des_acc_SE3 << endl;
+  calculateThrust(u);
+  double thrust_z = u.thrust * b3_in_world[2];
 
-  // 测试两种姿态解算方法的一致性
-  //  1. 相对四元数
-  Quaterniond q_err = q_SE3 * u.q.conjugate();
-
-  // 2. 旋转误差角度
-  double angle_err = 2.0 * std::acos(q_err.w()); // rad
-
-  // 3. 误差轴
-  Vector3d axis_err;
-  double s = std::sqrt(1.0 - q_err.w() * q_err.w());
-  if (s < 1e-6)
-  {
-    axis_err = Vector3d::UnitX(); // 任意轴
-  }
-  else
-  {
-    axis_err = q_err.vec() / s;
-  }
-
-  // 4. 打印
-  cout << "Attitude error (rad): " << angle_err << std::endl;
-  cout << "Error axis: ["
-       << axis_err.transpose() << "]" << std::endl;
+  // 填充并发布 Float64MultiArray
+  double s3_w = q_SE3.w(), s3_x = q_SE3.x(), s3_y = q_SE3.y(), s3_z = q_SE3.z();
+  std_msgs::Float64MultiArray msg;
+  msg.data.clear();
+  msg.data.push_back(s3_w);
+  msg.data.push_back(s3_x);
+  msg.data.push_back(s3_y);
+  msg.data.push_back(s3_z);
+  q_pub.publish(msg);
 
   if (flight_state == FlightState::FLYING)
   {
@@ -242,7 +228,7 @@ double LinearControl::computeDesiredCollectiveThrustSignal()
     ROS_ERROR_THROTTLE(1.0, "Invalid thr2acc value: %f", thr2acc);
     return kMinThrust;
   }
-  return des_acc(2) / thr2acc;
+  return des_acc_SE3 / thr2acc;
 }
 
 bool LinearControl::estimateThrustModel(const Vector3d &est_a, const Parameter_t &param)

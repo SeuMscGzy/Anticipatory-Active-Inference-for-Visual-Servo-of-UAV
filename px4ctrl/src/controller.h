@@ -6,6 +6,7 @@
 #define CONTROLLER_H_
 #include <mavros_msgs/AttitudeTarget.h>
 #include <quadrotor_msgs/Px4ctrlDebug.h>
+#include <std_msgs/Float64MultiArray.h>
 #include <queue>
 #include <cmath>
 #include "input.h"
@@ -60,6 +61,9 @@ public:
 class LinearControl
 {
 public:
+	ros::NodeHandle nh;
+	ros::Publisher q_pub = nh.advertise<std_msgs::Float64MultiArray>("quat_array", 10);
+
 	friend class PX4CtrlFSM;
 	enum class FlightState
 	{

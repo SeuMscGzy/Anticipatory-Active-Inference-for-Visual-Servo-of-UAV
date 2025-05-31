@@ -40,27 +40,51 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
     : nh_(nh), stop_thread(false), processing(false),
       lost_target(true), desired_yaw(0), clockwise(true)
 {
-  rs2::pipeline pipe;
   config.disable_stream(RS2_STREAM_DEPTH);
   config.disable_stream(RS2_STREAM_INFRARED);
   config.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_RGB8, 30);
-  auto profile = pipe.start(config);
-  // 2. 获取设备和深度传感器（D405 的 ISP 在深度模组内）
-  auto dev = profile.get_device();
-  auto sensor = dev.first<rs2::depth_sensor>();
-  // 3. 关闭自动曝光
-  if (sensor.supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
-    sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
+  try
+  {
+    rs2::pipeline_profile profile;
+    // 1.1 打开管线（只开 Color，640×360，RGB8，30fps）
+    if (!g.open(config))
+    {
+      // 如果打开失败，抛出异常
+      ROS_ERROR_STREAM("ObjectDetector: Failed to open RealSense grabber!");
+      throw std::runtime_error("Failed to open RealSense grabber!");
+    }
 
-  // 4. 手动设置曝光时间（单位为微秒，范围一般 1–165000 μs）
-  //    默认值约为 33000 μs（33 ms），可根据运动速度和光照条件调小到 5000–10000 μs
-  if (sensor.supports(RS2_OPTION_EXPOSURE))
-    sensor.set_option(RS2_OPTION_EXPOSURE, 3000);
-  // 5. （可选）提高增益以补偿亮度下降
-  if (sensor.supports(RS2_OPTION_GAIN))
-    sensor.set_option(RS2_OPTION_GAIN, 64);
-  pipe.stop();
-  g.open(config);
+    // 1.2 拿到 ViSP 内部创建的 rs2::pipeline_profile
+    profile = g.getPipelineProfile();
+
+    // 1.3 通过 profile 拿 device → depth_sensor（D405 的 ISP 在 depth 传感器模块里）
+    auto dev = profile.get_device();
+    auto sensor = dev.first<rs2::depth_sensor>();
+
+    // 1.4 关闭自动曝光
+    if (sensor.supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
+    {
+      sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
+    }
+
+    // 1.5 手动设曝光时间（单位：微秒），这里设 3000 μs ≈ 3ms
+    if (sensor.supports(RS2_OPTION_EXPOSURE))
+    {
+      sensor.set_option(RS2_OPTION_EXPOSURE, 3000);
+    }
+
+    // 1.6 提高增益以补偿亮度下降（可选）
+    if (sensor.supports(RS2_OPTION_GAIN))
+    {
+      sensor.set_option(RS2_OPTION_GAIN, 64);
+    }
+    // 这样就把曝光、增益等参数“真正”地作用到了 ViSP 的管线上，而且只做了一次。
+  }
+  catch (const std::exception &e)
+  {
+    ROS_ERROR_STREAM("ObjectDetector: Failed to initialize RealSense grabber: " << e.what());
+    throw; // 或自行处理，决定是否退出程序
+  }
   cam = g.getCameraParameters(RS2_STREAM_COLOR, vpCameraParameters::perspectiveProjWithoutDistortion);
   // 假设原 cam 已经由 g.getCameraParameters(...) 构造
   double fx = cam.get_px();
@@ -118,6 +142,7 @@ ObjectDetector::~ObjectDetector()
   {
     worker_thread.join();
   }
+  g.close();
 }
 
 void ObjectDetector::start()
@@ -217,7 +242,7 @@ void ObjectDetector::processImages()
             R_c2a(i, j) = R_c2a_vp[i][j];
         R_w2a = R_w2c * R_c2a;
         Eigen::Quaterniond q_w2a(R_w2a);
-        desired_yaw = atan2(2 * (q_w2a.w() * q_w2a.z() + q_w2a.x() * q_w2a.y()),1 - 2 * (q_w2a.y() * q_w2a.y() + q_w2a.z() * q_w2a.z())) + M_PI / 2;
+        desired_yaw = atan2(2 * (q_w2a.w() * q_w2a.z() + q_w2a.x() * q_w2a.y()), 1 - 2 * (q_w2a.y() * q_w2a.y() + q_w2a.z() * q_w2a.z())) + M_PI / 2;
         lost_target = false;
         cout << "Position_after: " << Position_after.transpose() << endl;
         cout << "Desired yaw: " << desired_yaw << endl;

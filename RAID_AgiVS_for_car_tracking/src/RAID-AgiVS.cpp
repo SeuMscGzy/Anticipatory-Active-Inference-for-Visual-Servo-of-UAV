@@ -36,7 +36,7 @@ private:
     const double T_c = 0.01;
     double x_bias = 0;
     double y_bias = 0;
-    double z_bias = 1.5;
+    double z_bias = 0.7;
     double y1_APO_fast_bias = 0;
     double y1_real_bias = 0;
     ros::NodeHandle nh;
@@ -71,22 +71,20 @@ public:
         }
     }
 
-    double limitControl(double controlValue, int which_axis)
+    double limitControl(double controlValue)
     {
-        double limit = (which_axis != 0) ? 5 : 5; // Limit is 3 for y and z, 1.5 for x axis.
-        if (abs(controlValue) >= limit)
+        if (abs(controlValue) >= 5)
         {
-            controlValue = limit * controlValue / abs(controlValue); // Apply limit
+            controlValue = 5 * controlValue / abs(controlValue); // Apply limit
         }
         return controlValue;
     }
 
-    double limitIntegral(double IntegralValue, int which_axis)
+    double limitIntegral(double IntegralValue)
     {
-        double limit = (which_axis != 0) ? 1 : 1; // Limit is 1.5 for y and z, 0.75 for x axis.
-        if (abs(IntegralValue) >= limit)
+        if (abs(IntegralValue) >= 1)
         {
-            IntegralValue = limit * IntegralValue / abs(IntegralValue); // Apply limit
+            IntegralValue = IntegralValue / abs(IntegralValue); // Apply limit
         }
         return IntegralValue;
     }
@@ -102,9 +100,9 @@ public:
         mu_last = mu;
         mu_p_last = mu_p;
         u_inte = double(u_inte - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu))));
-        u_inte = limitIntegral(u_inte, which_axis);
+        u_inte = limitIntegral(u_inte);
         u = u_inte - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling - k_p * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu));
-        u = limitControl(u, which_axis);
+        u = limitControl(u);
     }
 };
 
@@ -127,47 +125,6 @@ public:
     }
 };
 
-class ButterworthLowPassFilter
-{
-private:
-    double fs; // sampling frequency
-    double fc; // cut-off frequency
-    double a0, a1, a2, b1, b2;
-    double prevX1, prevX2, prevY1, prevY2;
-
-public:
-    ButterworthLowPassFilter(double sampleRate, double cutoffFrequency)
-        : fs(sampleRate), fc(cutoffFrequency), prevX1(0), prevX2(0), prevY1(0), prevY2(0)
-    {
-        calculateCoefficients();
-    }
-
-    void calculateCoefficients()
-    {
-        double ita = 1.0 / tan(M_PI * fc / fs);
-        double q = sqrt(2.0);
-        double a0_temp = 1.0 / (1.0 + q * ita + ita * ita);
-        a0 = a0_temp;
-        a1 = 2 * a0_temp;
-        a2 = a0_temp;
-        b1 = 2.0 * a0_temp * (1 - ita * ita);
-        b2 = a0_temp * (1 - q * ita + ita * ita);
-    }
-    double filter(double input)
-    {
-        double output = a0 * input + a1 * prevX1 + a2 * prevX2 - b1 * prevY1 - b2 * prevY2;
-        prevX2 = prevX1;
-        prevX1 = input;
-        prevY2 = prevY1;
-        prevY1 = output;
-        return output;
-    }
-    void reset()
-    {
-        prevX1 = prevX2 = prevY1 = prevY2 = 0;
-    }
-};
-
 class MyController
 {
 private:
@@ -184,11 +141,9 @@ private:
     ros::NodeHandle nh;
     ros::Timer timer;
 
-    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
     LowPassFilter filter_for_img;
     AIC2Controller aic2controller;
-    // Iir::Butterworth::LowPass<4> filter_4_for_img;
-    Iir::Butterworth::LowPass<2> filter_4_for_deri;
+    Iir::Butterworth::LowPass<2> filter_for_deri;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
     double loss_or_not_;
@@ -235,31 +190,31 @@ public:
             0, 1;
         B0 << 5.00000000000000e-05,
             0.0100000000000000;
+        timer = nh.createTimer(ros::Duration(0.01), &MyController::timerCallback, this);
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this, ros::TransportHints().tcpNoDelay());
-        filter_4_for_deri.setup(20, 2.7);
+        filter_for_deri.setup(20, 2.7);
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
     {
+        timer_count = 0;
         loss_or_not_ = loss_or_not;
         use_bias_ = use_bias;
         which_axis_ = which_axis;
         y_real = measure_single_axis;
         y_real = filter_for_img.filter(y_real);
-        // y_real = filter_4_for_img.filter(y_real);
 
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
         function(loss_or_not_, use_bias_, which_axis_);
 
         y_real_derivative = (y_real - y_real_last) / time_pass; // 0.05 seconds = 50ms
-        // y_filtered_deri = filter_for_deri.filter(y_real_derivative);
-        y_filtered_deri = filter_4_for_deri.filter(y_real_derivative);
+        y_filtered_deri = filter_for_deri.filter(y_real_derivative);
 
         // Update the last values for the next iteration
         y_real_last = y_real;
         timer_count++;
-        timer = nh.createTimer(ros::Duration(0.01), &MyController::timerCallback, this);
+        timer.start();
         time_last = time_now;
     }
 
@@ -270,7 +225,6 @@ public:
         if (timer_count >= 5)
         {
             timer.stop();
-            timer_count = 0;
         }
     }
 

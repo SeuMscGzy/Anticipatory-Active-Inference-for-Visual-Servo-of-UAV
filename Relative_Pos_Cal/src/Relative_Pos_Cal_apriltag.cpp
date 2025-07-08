@@ -189,10 +189,6 @@ void ObjectDetector::publishDetectionResult(ros::Time &ts, bool is_fault)
   {
     ROS_WARN_STREAM("Fault detected, skipping processing.");
   }
-  else
-  {
-    ROS_INFO_STREAM("Processing completed successfully.");
-  }
 }
 
 void ObjectDetector::processImages()
@@ -244,8 +240,11 @@ void ObjectDetector::processImages()
         Eigen::Quaterniond q_w2a(R_w2a);
         desired_yaw = atan2(2 * (q_w2a.w() * q_w2a.z() + q_w2a.x() * q_w2a.y()), 1 - 2 * (q_w2a.y() * q_w2a.y() + q_w2a.z() * q_w2a.z())) + M_PI / 2;
         lost_target = false;
-        cout << "Position_after: " << Position_after.transpose() << endl;
-        cout << "Desired yaw: " << desired_yaw << endl;
+        static int print_count = 0;
+        if (++print_count % 10 == 0) {
+          cout << "Position_after: " << Position_after.transpose() << endl;
+        }
+        //cout << "Desired yaw: " << desired_yaw << endl;
       }
       else
       {

@@ -12,14 +12,13 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   cv_bridge
   image_transport
-  cap_pic_from_cam_srv
 )
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED) 
 include_directories(include ${OpenCV_INCLUDE_DIRS})
 
 catkin_package(
-  CATKIN_DEPENDS roscpp cap_pic_from_cam_srv
+  CATKIN_DEPENDS roscpp
 )
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)

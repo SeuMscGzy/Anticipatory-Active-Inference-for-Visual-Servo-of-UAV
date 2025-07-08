@@ -47,6 +47,8 @@ include_directories(
   /usr/local/include/acado
   /usr/local/share/osqp/codegen_files/inc/private
   /usr/include/eigen3
+  /opt/hpipm/include
+  /opt/blasfeo/include
 )
 include_directories(${OsqpEigen_INCLUDE_DIRS})
 
@@ -167,7 +169,7 @@ catkin_package(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(testnode_mpai src/mpai_qp.cpp src/RAID_AgiVS_for_UAV.cpp src/run_RAID_AgiVS_UAV.cpp)
+add_executable(testnode_mpai src/mpai_hpipm.cpp src/RAID_AgiVS_for_UAV.cpp src/run_RAID_AgiVS_UAV.cpp)
 #add_executable(testnode_mpai src/mpai_qpOASES.cpp)
 #add_executable(testnode_mpai src/mpai_casadi.cpp src/mpai_casadi_qp.cpp src/RAID_AgiVS_for_test.cpp src/run_RAID_AgiVS.cpp)
 ## Rename C++ executable without prefix
@@ -189,6 +191,8 @@ target_link_libraries(testnode_mpai
    casadi
    osqp
    /usr/local/lib/libacado_toolkit_s.so
+   /opt/hpipm/lib/libhpipm.a
+   /opt/blasfeo/lib/libblasfeo.a
 )
 
 

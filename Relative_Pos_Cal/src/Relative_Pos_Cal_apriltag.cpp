@@ -1,4 +1,5 @@
 #include "Relative_Pos_Cal_apriltag.h"
+#include <utility>
 
 using namespace std;
 using namespace std::chrono;
@@ -34,7 +35,7 @@ void rotate90(const vpImage<T> &src, vpImage<T> &dst, bool clockwise)
   }
 }
 
-constexpr double PROCESSING_LATENCY = 0.04; // 40ms处理延迟
+constexpr double PROCESSING_LATENCY = 0.05; // 50ms处理延迟
 const Eigen::Vector3d POS_OFFSET{0.00625, -0.08892, 0.06430};
 ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
     : nh_(nh), stop_thread(false), processing(false),
@@ -42,7 +43,7 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
 {
   config.disable_stream(RS2_STREAM_DEPTH);
   config.disable_stream(RS2_STREAM_INFRARED);
-  config.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_RGB8, 30);
+  config.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGB8, 60);
   try
   {
     rs2::pipeline_profile profile;
@@ -92,7 +93,7 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
   double u0 = cam.get_u0();
   double v0 = cam.get_v0();
   unsigned int W = 640; // 旋转前宽度
-  unsigned int H = 360; // 旋转前高度
+  unsigned int H = 480; // 旋转前高度
 
   if (clockwise)
   {
@@ -130,7 +131,7 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
   point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1, true);
   odom_sub_ = nh_.subscribe<sensor_msgs::Imu>("/mavros/imu/data", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
   image_pub = nh.advertise<sensor_msgs::Image>("/camera/image", 1);
-  timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);
+  timer = nh_.createTimer(ros::Duration(0.06), &ObjectDetector::timerCallback, this);
   worker_thread = thread(&ObjectDetector::processImages, this);
 }
 
@@ -163,7 +164,10 @@ void ObjectDetector::odomCallback(const sensor_msgs::Imu::ConstPtr &msg)
   Eigen::Quaterniond q(
       msg->orientation.w, msg->orientation.x,
       msg->orientation.y, msg->orientation.z);
-  R_w2c = q.toRotationMatrix() * R_i2c;
+
+  Eigen::Matrix3d R_new = q.toRotationMatrix() * R_i2c;
+  std::lock_guard<std::mutex> lock(R_mutex);
+  R_w2c = R_new;
 }
 
 void ObjectDetector::baseProcess(ros::Time ts, bool is_fault)
@@ -182,8 +186,17 @@ void ObjectDetector::baseProcess(ros::Time ts, bool is_fault)
 
 void ObjectDetector::publishDetectionResult(ros::Time &ts, bool is_fault)
 {
-  std_msgs::Float64MultiArray msg;
-  msg.data = {Position_after.x(), Position_after.y(), Position_after.z(), ts.toSec(), static_cast<double>(is_fault || lost_target), desired_yaw};
+  static std_msgs::Float64MultiArray msg;
+  if (msg.data.size() != 6)
+  {
+    msg.data.resize(6);
+  }
+  msg.data[0] = Position_after.x();
+  msg.data[1] = Position_after.y();
+  msg.data[2] = Position_after.z();
+  msg.data[3] = ts.toSec();
+  msg.data[4] = static_cast<double>(is_fault || lost_target);
+  msg.data[5] = desired_yaw;
   point_pub_.publish(msg);
   if (is_fault)
   {
@@ -212,14 +225,16 @@ void ObjectDetector::processImages()
       ros::Time image_timestamp = ros::Time::now();
       vpImage<unsigned char> flippedImage;
       rotate90(I, flippedImage, clockwise);
-      I = flippedImage;
+      std::swap(I, flippedImage);
       cv::Mat imageMat;
       vpImageConvert::convert(I, imageMat);
       std_msgs::Header header;
       header.stamp = ros::Time::now();
       sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
       image_pub.publish(msg);
-      std::vector<vpHomogeneousMatrix> cMo_vec;
+      static std::vector<vpHomogeneousMatrix> cMo_vec;
+      cMo_vec.clear();
+      cMo_vec.reserve(1);
       tag_detector.detect(I, 0.0795, cam_rot, cMo_vec);
       // ros::Time detection_time = ros::Time::now();
       // cout << "Detection time: " << detection_time.toSec() - image_timestamp.toSec() << " seconds." << endl;
@@ -230,21 +245,27 @@ void ObjectDetector::processImages()
         Position_before[1] = cMo_vec[0][1][3];
         Position_before[2] = cMo_vec[0][2][3];
         Position_before += POS_OFFSET;
-        Position_after = R_w2c * Position_before;
+        Eigen::Matrix3d R_w2c_local;
+        {
+          std::lock_guard<std::mutex> lock(R_mutex);
+          R_w2c_local = R_w2c;
+        }
+        Position_after = R_w2c_local * Position_before;
 
         vpRotationMatrix R_c2a_vp = cMo_vec[0].getRotationMatrix();
         for (int i = 0; i < 3; ++i)
           for (int j = 0; j < 3; ++j)
             R_c2a(i, j) = R_c2a_vp[i][j];
-        R_w2a = R_w2c * R_c2a;
+        R_w2a = R_w2c_local * R_c2a;
         Eigen::Quaterniond q_w2a(R_w2a);
         desired_yaw = atan2(2 * (q_w2a.w() * q_w2a.z() + q_w2a.x() * q_w2a.y()), 1 - 2 * (q_w2a.y() * q_w2a.y() + q_w2a.z() * q_w2a.z())) + M_PI / 2;
         lost_target = false;
         static int print_count = 0;
-        if (++print_count % 10 == 0) {
+        if (++print_count % 10 == 0)
+        {
           cout << "Position_after: " << Position_after.transpose() << endl;
         }
-        //cout << "Desired yaw: " << desired_yaw << endl;
+        // cout << "Desired yaw: " << desired_yaw << endl;
       }
       else
       {

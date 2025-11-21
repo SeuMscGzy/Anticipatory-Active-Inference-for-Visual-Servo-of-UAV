@@ -53,6 +53,7 @@ public:
     std::atomic<bool> stop_thread;
     std::atomic<bool> processing;
     std::mutex data_mutex;
+    std::mutex R_mutex;
     std::condition_variable cv;
 
     bool lost_target;

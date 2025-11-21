@@ -1,0 +1,199 @@
+#include <ros/ros.h>
+#include <std_msgs/Float64.h>
+#include "mpai_qpOASES.h"
+#include <std_msgs/Int32.h>
+#include <std_msgs/Bool.h>
+#include <std_msgs/Float64MultiArray.h>
+#include <thread>
+#include <vector>
+#include <quadrotor_msgs/PositionCommand.h>
+#include <quadrotor_msgs/TakeoffLand.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TwistStamped.h>
+#include <atomic>
+
+using namespace std;
+using namespace Eigen;
+class LowPassFilter
+{
+private:
+    double alpha;
+    double last_output;
+
+public:
+    // Constructor
+    LowPassFilter(double alpha_value) : alpha(alpha_value), last_output(0.0) {}
+
+    // Filter a new value
+    double filter(double input)
+    {
+        double output = alpha * input + (1 - alpha) * last_output;
+        last_output = output;
+        return output;
+    }
+};
+
+class APO
+{
+private:
+    // 你原来的成员...
+    Eigen::Vector2d hat_x_last, hat_x, B_bar, C_bar, B0;
+    Eigen::Matrix2d A_bar, A0;
+    double predict_y, y_real;
+    bool first_time_in_fun, loss_target;
+    double loss_or_not_;
+    double u;
+    LowPassFilter filter_for_img;
+    ros::NodeHandle nh;
+
+    // 新增：测量缓存 & 标志
+    bool has_new_measurement_;
+    double latest_measure_;
+    double latest_loss_or_not_;
+    friend class AAI_DA;
+
+public:
+    APO()
+        : hat_x_last(Eigen::Vector2d::Zero()),
+          nh("~"),
+          hat_x(Eigen::Vector2d::Zero()),
+          predict_y(0.0),
+          y_real(0.0),
+          filter_for_img(0.95),
+          loss_target(true),
+          loss_or_not_(1),
+          u(0.0),
+          first_time_in_fun(true),
+          has_new_measurement_(false)
+    {
+        A_bar << 0.518572754477203, 0.00740818220681718,
+            -6.66736398613546, 0.963063686886233;
+        B_bar << 0, 0;
+        C_bar << 0.481427245526137,
+            6.66736398622287;
+        A0 << 1, 0.02,
+            0, 1;
+        B0 << 0.0002,
+            0.02;
+    }
+
+    void pushMeasurement(double measure_single_axis, double loss_or_not)
+    {
+        latest_measure_ = measure_single_axis;
+        latest_loss_or_not_ = loss_or_not;
+        has_new_measurement_ = true; // 告诉 step(): 下一次是采样步
+    }
+
+    void step()
+    {
+        // 1. 如果还没任何测量，就啥都不做（避免用垃圾初值）
+        if (!has_new_measurement_ && first_time_in_fun)
+        {
+            return;
+        }
+
+        bool meas_this_step = false;
+
+        // 2. 如果这一周期内来了新图像，就做滤波 & 标记为采样步
+        if (has_new_measurement_)
+        {
+            y_real = filter_for_img.filter(latest_measure_);
+            loss_or_not_ = latest_loss_or_not_;
+            has_new_measurement_ = false;
+            meas_this_step = true;
+        }
+
+        // 3. 用 loss 标志更新 loss_target / first_time 状态
+        if (loss_or_not_ == 1 && loss_target == false) // 从看到目标 -> 丢失
+        {
+            loss_target = true;
+        }
+        if (loss_or_not_ == 0 && loss_target == true) // 从丢失 -> 重新看到
+        {
+            loss_target = false;
+            first_time_in_fun = true;
+        }
+
+        // 4. 真正的 APO + AIC2 更新逻辑
+        if (first_time_in_fun && meas_this_step)
+        {
+            // 第一次有测量的那一步：初始化
+            first_time_in_fun = false;
+            predict_y = y_real;
+            hat_x(0) = y_real;
+        }
+        else
+        {
+            if (meas_this_step)
+            {
+                // ====== 采样步（有新图像）======
+                // 对应你之前的 timer_count == 0 分支
+                predict_y = y_real;
+                u = 0;
+                hat_x = A_bar * hat_x_last + B0 * u + C_bar * predict_y;
+            }
+            else
+            {
+                // ====== 预测步（无新图像）======
+                // 对应你之前的 timer_count > 0 分支
+                Eigen::Vector2d coeff(1, 0);
+                u = 0;
+                predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * u);
+                hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
+            }
+        }
+        // 5. 更新 hat_x_last
+        hat_x_last = hat_x;
+    }
+};
+
+class AAI_DA
+{
+public:
+    // parameters and variables for the optimization problem
+    double dt = 0.02;
+    int Np = 50;
+    double precice_z1 = 2;
+    double precice_z2 = 0.3;
+    double precice_w1 = 2;
+    double precice_w2 = 1;
+    double e1 = 2;
+    double precice_z_u = 0.03;
+    double umin = -5;
+    double umax = 5;
+    Optimizer optimizer_xyz;
+    vector<double> optical_xyz = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    double ground_truth_x, ground_truth_y, ground_truth_z;
+    double ground_truth_first_deri_x, ground_truth_first_deri_y, ground_truth_first_deri_z;
+
+    APO APOX, APOY, APOZ;
+
+    // parameters and variables for the controller
+    std::atomic<double> des_yaw;
+    quadrotor_msgs::PositionCommand acc_msg;
+
+    // variables for control logic
+    std::atomic<int> px4_state;
+
+    // ros related
+    ros::NodeHandle nh;
+    ros::Publisher acc_cmd_pub;
+    ros::Subscriber px4_state_sub;
+    ros::Subscriber relative_pos_sub;
+    ros::Subscriber ground_truth_sub;
+    ros::Subscriber ground_truth_pose_sub;
+    ros::Publisher pub_hat_x;
+
+    // 控制线程
+    std::thread xyz_thread;
+
+    // functions
+    AAI_DA(ros::NodeHandle &nh);
+    ~AAI_DA();
+    void startControlLoops();
+    void xyzAxisControlLoop();
+    void StateCallback(const std_msgs::Int32::ConstPtr &msg);
+    void relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg);
+    void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg);
+    void ground_truth_pose_callback(const geometry_msgs::PoseStamped::ConstPtr &msg);
+};

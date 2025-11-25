@@ -1,31 +1,60 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <tf2/LinearMath/Quaternion.h>
-#include <cmath>
-#include <std_msgs/Float64MultiArray.h>
-int main(int argc, char **argv)
+
+int main(int argc, char** argv)
 {
-    // 初始化 ROS 节点
-    ros::init(argc, argv, "fake_pose_publisher");
-    ros::NodeHandle nh;
-    ros::Publisher pub = nh.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 10);
-    ros::Rate rate(1.0 / 0.06); // 1/0.06 = 16.67Hz
+  ros::init(argc, argv, "fake_mocap_pose_pub");
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
 
-    std_msgs::Float64MultiArray msg;
-    msg.data = {1, 1, 1, 0, 0, 0}; // 设定固定数据
-    double a = ros::Time::now().toSec();
-    while (ros::ok())
-    {
-        double b = sin(ros::Time::now().toSec() - a - 0.058);
-        double c = sin(ros::Time::now().toSec() - a);
-        msg.data[0] = b;
-        msg.data[1] = b;
-        msg.data[2] = b;
-        msg.data[5] = c;
-        pub.publish(msg);
-        ros::spinOnce();
-        rate.sleep();
-    }
+  // 可以通过私有参数改话题名：_topic:=...
+  std::string topic_name;
+  pnh.param<std::string>("topic", topic_name,
+                         std::string("/mavros/vision_pose/pose"));
 
-    return 0;
+  ros::Publisher pose_pub =
+      nh.advertise<geometry_msgs::PoseStamped>(topic_name, 10);
+
+  double rate_hz;
+  pnh.param("rate", rate_hz, 100.0);   // 发布频率
+  ros::Rate rate(rate_hz);
+
+  // 虚构一个固定的位姿
+  const double x = 1;
+  const double y = 0;
+  const double z = 0;
+  const double roll  = 0.0;
+  const double pitch = 0.0;
+  const double yaw   = 0; // rad
+
+  ROS_INFO_STREAM("Fake mocap pose publisher on [" << topic_name
+                  << "], rate = " << rate_hz << " Hz");
+
+  while (ros::ok())
+  {
+    geometry_msgs::PoseStamped msg;
+    msg.header.stamp = ros::Time::now();
+    msg.header.frame_id = "world";   // 你期望的世界坐标系名称
+
+    // 位置
+    msg.pose.position.x = x;
+    msg.pose.position.y = y;
+    msg.pose.position.z = z;
+
+    // 姿态（RPY -> 四元数）
+    tf2::Quaternion q;
+    q.setRPY(roll, pitch, yaw);
+    msg.pose.orientation.x = q.x();
+    msg.pose.orientation.y = q.y();
+    msg.pose.orientation.z = q.z();
+    msg.pose.orientation.w = q.w();
+
+    pose_pub.publish(msg);
+
+    ros::spinOnce();
+    rate.sleep();
+  }
+
+  return 0;
 }

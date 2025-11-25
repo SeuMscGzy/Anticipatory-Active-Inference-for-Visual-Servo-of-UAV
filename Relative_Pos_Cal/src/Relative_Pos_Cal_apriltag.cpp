@@ -34,9 +34,8 @@ void rotate90(const vpImage<T> &src, vpImage<T> &dst, bool clockwise)
     }
   }
 }
-
-constexpr double PROCESSING_LATENCY = 0.05; // 50ms处理延迟
-const Eigen::Vector3d POS_OFFSET{0.00625, -0.08892, 0.06430};
+constexpr double PROCESSING_LATENCY = 0.04; // 40ms处理延迟
+const Eigen::Vector3d POS_OFFSET{0, -0.0712, 0.01577};
 ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
     : nh_(nh), stop_thread(false), processing(false),
       lost_target(true), desired_yaw(0), clockwise(true)
@@ -98,11 +97,15 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
   if (clockwise)
   {
     // 顺时针 90°
-    cam_rot.initPersProjWithoutDistortion(
-        /*fx=*/fy,
-        /*fy=*/fx,
-        /*u0=*/(double)(H - 1) - v0,
-        /*v0=*/u0);
+    // cam_rot.initPersProjWithoutDistortion(fy, fx, (double)(H - 1) - v0, u0);
+    cam_rot.initProjWithKannalaBrandtDistortion(392.5919623095264, 394.6504822990919,
+                                                238.78379511684258, 322.6289796142194,
+                                                std::vector<double>{
+                                                    0.29186846588871074,
+                                                    0.1618033745553163,
+                                                    0.065934344194105,
+                                                    0.0270748559249096});
+    //cout << fy << " " << fx << " " << (H - 1 - v0) << " " << u0 << endl;
   }
   else
   {
@@ -121,13 +124,13 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
 
   Position_before = Eigen::Vector3d::Zero();
   Position_after = Eigen::Vector3d::Zero();
-  R_i2c << 0.00698, -0.99997, 0.00279,
-      -0.99988, -0.00694, 0.01416,
-      -0.01414, -0.00289, -0.99990;
+  R_i2c << 0.0141, -0.9999, 0.0078,
+      -0.9997, -0.0142, -0.0181,
+      0.0183, -0.0076, -0.9998;
+  R_i2c.normalize();
   R_w2c = R_i2c;
   R_c2a = Eigen::Matrix3d::Identity();
   R_w2a = Eigen::Matrix3d::Identity();
-
   point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1, true);
   odom_sub_ = nh_.subscribe<sensor_msgs::Imu>("/mavros/imu/data", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
   image_pub = nh.advertise<sensor_msgs::Image>("/camera/image", 1);
@@ -235,7 +238,7 @@ void ObjectDetector::processImages()
       static std::vector<vpHomogeneousMatrix> cMo_vec;
       cMo_vec.clear();
       cMo_vec.reserve(1);
-      tag_detector.detect(I, 0.0795, cam_rot, cMo_vec);
+      tag_detector.detect(I, 0.0561, cam_rot, cMo_vec);
       // ros::Time detection_time = ros::Time::now();
       // cout << "Detection time: " << detection_time.toSec() - image_timestamp.toSec() << " seconds." << endl;
       bool fault_detected = (cMo_vec.size() != 1);

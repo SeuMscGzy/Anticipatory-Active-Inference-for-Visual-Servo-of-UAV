@@ -41,7 +41,7 @@ def tracking_model():
     #   dot(vel) = u
     f_expl = vertcat(
         relative_vel,  # Position derivative equals velocity
-        u              # Velocity derivative equals control input (acceleration)
+        -u              # Velocity derivative equals control input (acceleration)
     )
     # Implicit expression: xdot - f_expl = 0
     f_impl_expr = xdot - f_expl

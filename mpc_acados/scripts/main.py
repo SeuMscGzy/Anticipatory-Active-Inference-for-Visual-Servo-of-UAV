@@ -96,7 +96,7 @@ class AcadosTrackingNode:
         self.x0 = np.array([
             self.filter1.x_real,
             self.filter1.y_real,
-            self.filter1.z_real + 0.7,
+            self.filter1.z_real + 1,
             self.filter1.x_filtered_deri,
             self.filter1.y_filtered_deri,
             self.filter1.z_filtered_deri

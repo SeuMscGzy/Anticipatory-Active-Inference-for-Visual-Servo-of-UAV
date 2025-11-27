@@ -3,7 +3,9 @@
 
 // 构造函数
 AAI_DA::AAI_DA(ros::NodeHandle &nh)
-    : nh(nh), px4_state(3), des_yaw(0.0), ground_truth_x(0.0), ground_truth_y(0.0), ground_truth_z(0.0),
+    : px4_state(3),
+      des_yaw(0.0),
+      ground_truth_x(0.0), ground_truth_y(0.0), ground_truth_z(0.0),
       ground_truth_first_deri_x(0.0), ground_truth_first_deri_y(0.0), ground_truth_first_deri_z(0.0),
       optimizer_xyz(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, precice_z_u, e1, umin, umax)
 {
@@ -14,9 +16,8 @@ AAI_DA::AAI_DA(ros::NodeHandle &nh)
                                   this, ros::TransportHints().tcpNoDelay());
   ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &AAI_DA::ground_truth_callback, this);
   ground_truth_pose_sub = nh.subscribe("/mavros/local_position/pose", 10, &AAI_DA::ground_truth_pose_callback, this);
-  pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
+  pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/aic2_xyz", 1);
 
-  // 启动控制循环线程
   startControlLoops();
 }
 
@@ -49,7 +50,7 @@ void AAI_DA::xyzAxisControlLoop()
     acc_msg.acceleration.x = acc.x();
     acc_msg.acceleration.y = acc.y();
     acc_msg.acceleration.z = acc.z();
-    acc_msg.yaw = des_yaw;
+    acc_msg.yaw = des_yaw.load(std::memory_order_relaxed);
     acc_msg.header.stamp = ros::Time::now();
     acc_cmd_pub.publish(acc_msg);
   };
@@ -59,26 +60,26 @@ void AAI_DA::xyzAxisControlLoop()
     hat_msg.data[1] = APOX.hat_x(1);
     hat_msg.data[2] = acc.x();
     hat_msg.data[3] = APOX.y_real;
-    hat_msg.data[4] = ground_truth_x;
-    hat_msg.data[5] = ground_truth_first_deri_x;
+    hat_msg.data[4] = ground_truth_x.load(std::memory_order_relaxed);
+    hat_msg.data[5] = ground_truth_first_deri_x.load(std::memory_order_relaxed);
     hat_msg.data[6] = APOY.hat_x(0);
     hat_msg.data[7] = APOY.hat_x(1);
     hat_msg.data[8] = acc.y();
     hat_msg.data[9] = APOY.y_real;
-    hat_msg.data[10] = ground_truth_y;
-    hat_msg.data[11] = ground_truth_first_deri_y;
+    hat_msg.data[10] = ground_truth_y.load(std::memory_order_relaxed);
+    hat_msg.data[11] = ground_truth_first_deri_y.load(std::memory_order_relaxed);
     hat_msg.data[12] = APOZ.hat_x(0);
     hat_msg.data[13] = APOZ.hat_x(1);
     hat_msg.data[14] = acc.z();
     hat_msg.data[15] = APOZ.y_real;
-    hat_msg.data[16] = ground_truth_z;
-    hat_msg.data[17] = ground_truth_first_deri_z;
+    hat_msg.data[16] = ground_truth_z.load(std::memory_order_relaxed);
+    hat_msg.data[17] = ground_truth_first_deri_z.load(std::memory_order_relaxed);
     pub_hat_x.publish(hat_msg);
   };
 
   while (ros::ok())
   {
-    if (px4_state == 3)
+    if (px4_state.load(std::memory_order_relaxed) == 3)
     {
       APOX.step();
       APOY.step();
@@ -107,27 +108,27 @@ void AAI_DA::xyzAxisControlLoop()
 
 void AAI_DA::ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)
 {
-  ground_truth_first_deri_x = msg->twist.linear.x;
-  ground_truth_first_deri_y = msg->twist.linear.y;
-  ground_truth_first_deri_z = msg->twist.linear.z;
+  ground_truth_first_deri_x.store(msg->twist.linear.x, std::memory_order_relaxed);
+  ground_truth_first_deri_y.store(msg->twist.linear.y, std::memory_order_relaxed);
+  ground_truth_first_deri_z.store(msg->twist.linear.z, std::memory_order_relaxed);
 }
 
 void AAI_DA::ground_truth_pose_callback(const geometry_msgs::PoseStamped::ConstPtr &msg)
 {
-  ground_truth_x = msg->pose.position.x;
-  ground_truth_y = msg->pose.position.y;
-  ground_truth_z = msg->pose.position.z;
+  ground_truth_x.store(msg->pose.position.x, std::memory_order_relaxed);
+  ground_truth_y.store(msg->pose.position.y, std::memory_order_relaxed);
+  ground_truth_z.store(msg->pose.position.z, std::memory_order_relaxed);
 }
 
 void AAI_DA::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
 {
-  des_yaw = msg->data[5];
+  des_yaw.store(msg->data[5], std::memory_order_relaxed);
   APOX.pushMeasurement(msg->data[0], msg->data[4]);
   APOY.pushMeasurement(msg->data[1], msg->data[4]);
-  APOZ.pushMeasurement(msg->data[2] + 0.7, msg->data[4]);
+  APOZ.pushMeasurement(msg->data[2] + 1, msg->data[4]);
 }
 
 void AAI_DA::StateCallback(const std_msgs::Int32::ConstPtr &msg)
 {
-  px4_state = msg->data;
+  px4_state.store(msg->data, std::memory_order_relaxed);
 }

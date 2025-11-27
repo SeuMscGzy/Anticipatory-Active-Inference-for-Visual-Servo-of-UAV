@@ -56,13 +56,12 @@ Optimizer::Optimizer(double dt, int Np,
           -dt_,               0,               0,
            0,                -dt_,             0,
            0,                 0,              -dt_;
-    Bd = -Bd; // 你原来的写法，这里保持不变
 
     // 闭环矩阵 Closed_A = Ad - K
     MatrixXd K(6, 6);
-    K << 0.8, 0,   0,   0,    0,    0,
-         0,   0.8, 0,   0,    0,    0,
-         0,   0,   0.8, 0,    0,    0,
+    K << 0.7, 0,   0,   0,    0,    0,
+         0,   0.7, 0,   0,    0,    0,
+         0,   0,   0.7, 0,    0,    0,
          0,   0,   0,   0.15, 0,    0,
          0,   0,   0,   0,    0.15, 0,
          0,   0,   0,   0,    0,    0.15;
@@ -210,7 +209,7 @@ Optimizer::Optimizer(double dt, int Np,
     std::cout << "Optimizer initialized with qpOASES, nV = " << nV_ << std::endl;
 }
 
-std::vector<double> Optimizer::optimize(const Vector3d &x,
+std::array<double, 10> Optimizer::optimize(const Vector3d &x,
                                         const Vector3d &vx,
                                         const Vector3d &mu_init,
                                         const Vector3d &mu_p_init)
@@ -234,7 +233,7 @@ std::vector<double> Optimizer::optimize(const Vector3d &x,
     xLowerScratch_.segment<3>(muIdx + 3)  = mu_p_init;
     xUpperScratch_.segment<3>(muIdx + 3)  = mu_p_init;
 
-    int nWSR = 200;
+    int nWSR = 100;
     returnValue ret =
         qpSolver_.hotstart(q_.data(),
                            xLowerScratch_.data(),
@@ -245,7 +244,7 @@ std::vector<double> Optimizer::optimize(const Vector3d &x,
     {
         // hotstart 失败就重置并重新 init
         qpSolver_.reset();
-        int nWSRInit = 1000;
+        int nWSRInit = 500;
         ret = qpSolver_.init(hessianRowMajor_.data(),
                              q_.data(),
                              xLowerScratch_.data(),
@@ -275,12 +274,12 @@ std::vector<double> Optimizer::optimize(const Vector3d &x,
     double cost = 0.0;
     qpSolver_.getObjVal(&cost);
 
-    std::vector<double> result = {
+    std::array<double, 10> result = {{
         ux_now, uy_now, uz_now,
         mu_x_next,   mu_y_next,   mu_z_next,
         mu_p_x_next, mu_p_y_next, mu_p_z_next,
         cost
-    };
+    }};
     return result;
 }
 
@@ -292,7 +291,7 @@ void Optimizer::initSolver()
     options.printLevel        = PL_NONE; // 如需调试可改为 PL_MEDIUM
     qpSolver_.setOptions(options);
 
-    int nWSR = 1000;
+    int nWSR = 100;
     returnValue ret =
         qpSolver_.init(hessianRowMajor_.data(),
                        q_.data(),

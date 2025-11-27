@@ -44,9 +44,11 @@ private:
     double loss_or_not_;
     double u;
     LowPassFilter filter_for_img;
-    ros::NodeHandle nh;
 
-    // 新增：测量缓存 & 标志
+    // 保护测量缓存的互斥量（用于跨线程访问）
+    std::mutex mtx_;
+
+    // 测量缓存 & 标志
     bool has_new_measurement_;
     double latest_measure_;
     double latest_loss_or_not_;
@@ -55,7 +57,6 @@ private:
 public:
     APO()
         : hat_x_last(Eigen::Vector2d::Zero()),
-          nh("~"),
           hat_x(Eigen::Vector2d::Zero()),
           predict_y(0.0),
           y_real(0.0),
@@ -79,6 +80,7 @@ public:
 
     void pushMeasurement(double measure_single_axis, double loss_or_not)
     {
+        std::lock_guard<std::mutex> lock(mtx_);
         latest_measure_ = measure_single_axis;
         latest_loss_or_not_ = loss_or_not;
         has_new_measurement_ = true; // 告诉 step(): 下一次是采样步
@@ -86,6 +88,8 @@ public:
 
     void step()
     {
+        std::lock_guard<std::mutex> lock(mtx_);
+
         // 1. 如果还没任何测量，就啥都不做（避免用垃圾初值）
         if (!has_new_measurement_ && first_time_in_fun)
         {
@@ -119,8 +123,8 @@ public:
         {
             // 第一次有测量的那一步：初始化
             first_time_in_fun = false;
-            predict_y = y_real;
-            hat_x(0) = y_real;
+            hat_x_last.setZero();
+            hat_x.setZero();
         }
         else
         {
@@ -152,7 +156,7 @@ class AAI_DA
 public:
     // parameters and variables for the optimization problem
     double dt = 0.02;
-    int Np = 50;
+    int Np = 40;
     double precice_z1 = 2;
     double precice_z2 = 0.3;
     double precice_w1 = 2;
@@ -162,9 +166,9 @@ public:
     double umin = -5;
     double umax = 5;
     Optimizer optimizer_xyz;
-    vector<double> optical_xyz = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    double ground_truth_x, ground_truth_y, ground_truth_z;
-    double ground_truth_first_deri_x, ground_truth_first_deri_y, ground_truth_first_deri_z;
+    std::array<double, 10> optical_xyz{};
+    std::atomic<double> ground_truth_x, ground_truth_y, ground_truth_z;
+    std::atomic<double> ground_truth_first_deri_x, ground_truth_first_deri_y, ground_truth_first_deri_z;
 
     APO APOX, APOY, APOZ;
 
@@ -176,7 +180,6 @@ public:
     std::atomic<int> px4_state;
 
     // ros related
-    ros::NodeHandle nh;
     ros::Publisher acc_cmd_pub;
     ros::Subscriber px4_state_sub;
     ros::Subscriber relative_pos_sub;

@@ -39,7 +39,7 @@ public:
      * @return {ux,uy,uz, mu_x_next,mu_y_next,mu_z_next,
      *         mu_p_x_next,mu_p_y_next,mu_p_z_next, cost}
      */
-    std::vector<double> optimize(const Eigen::Vector3d &x,
+    std::array<double, 10> optimize(const Eigen::Vector3d &x,
                                  const Eigen::Vector3d &vx,
                                  const Eigen::Vector3d &mu_init,
                                  const Eigen::Vector3d &mu_p_init);

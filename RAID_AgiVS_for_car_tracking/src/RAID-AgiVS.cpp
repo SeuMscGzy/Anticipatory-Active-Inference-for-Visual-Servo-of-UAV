@@ -36,7 +36,7 @@ private:
     const double T_c = 0.02;
     double x_bias = 0;
     double y_bias = 0;
-    double z_bias = 0.7;
+    double z_bias = 1;
     double y1_APO_fast_bias = 0;
     ros::NodeHandle nh;
 

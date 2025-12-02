@@ -15,6 +15,12 @@ find_package(catkin REQUIRED COMPONENTS
 )
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED) 
+find_package(realsense2 REQUIRED)  # 如果之前没写过
+
+include_directories(
+  ${realsense2_INCLUDE_DIR}
+  # 还有你的其他 include 路径
+)
 include_directories(include ${OpenCV_INCLUDE_DIRS})
 
 catkin_package(
@@ -143,6 +149,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(Relative_Pos_Cal src/Relative_Pos_Cal_apriltag.cpp)
+add_executable(set_d405_preset src/set_d405_preset.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -159,6 +166,10 @@ target_link_libraries(Relative_Pos_Cal
    ${catkin_LIBRARIES}
    Eigen3::Eigen
    apriltag
+ )
+ target_link_libraries(set_d405_preset
+   ${catkin_LIBRARIES}
+   ${realsense2_LIBRARY}
  )
  target_link_libraries(Relative_Pos_Cal ${OpenCV_LIBS})
  target_link_libraries(Relative_Pos_Cal ${VISP_LIBRARIES})

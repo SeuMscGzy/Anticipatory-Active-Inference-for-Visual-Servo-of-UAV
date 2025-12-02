@@ -36,6 +36,8 @@
 #include <visp3/core/vpImageTools.h>
 #include <visp3/core/vpImageFilter.h>
 #include <sensor_msgs/Imu.h>
+#include <fstream>
+#include <librealsense2/rs_advanced_mode.hpp> // 注意要包含这个头
 using namespace std;
 using namespace std::chrono;
 

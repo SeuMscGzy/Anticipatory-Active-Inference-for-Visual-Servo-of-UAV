@@ -1,10 +1,15 @@
 #include "Relative_Pos_Cal_apriltag.h"
 #include <utility>
+#include <thread> // 为 std::this_thread::sleep_for
+#include <chrono>
 
 using namespace std;
 using namespace std::chrono;
-// 目标：相对于图像时间戳固定 40 ms 延时（你可以改成 0.05）
+
+// 目标：相对于图像时间戳固定 40 ms 延时
 constexpr double PROCESSING_LATENCY = 0.04; // 40 ms
+// 目标：整轮 while 循环周期 60 ms
+const milliseconds LOOP_PERIOD(60);
 
 // 相机坐标系到无人机机体系（IMU）的小偏移
 const Eigen::Vector3d POS_OFFSET(0.0, -0.0712, 0.01577);
@@ -44,49 +49,22 @@ void rotate90(const vpImage<T> &src, vpImage<T> &dst, bool clockwise)
 }
 
 ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
-  : nh_(nh),
-    stop_thread(false),
-    lost_target(true),
-    desired_yaw(0.0),
-    clockwise(true)
+    : nh_(nh),
+      stop_thread(false),
+      lost_target(true),
+      desired_yaw(0.0),
+      clockwise(true)
 {
   // ----------------- 1. RealSense 初始化 -----------------
   config.disable_stream(RS2_STREAM_DEPTH);
   config.disable_stream(RS2_STREAM_INFRARED);
-  config.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGB8, 60);
-
+  config.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGB8, 30);
   try
   {
-    rs2::pipeline_profile profile;
-
     if (!g.open(config))
     {
       ROS_ERROR_STREAM("ObjectDetector: Failed to open RealSense grabber!");
       throw std::runtime_error("Failed to open RealSense grabber!");
-    }
-
-    profile = g.getPipelineProfile();
-
-    // ISP / 传感器（D405 的 ISP 在 depth_sensor 模块里）
-    auto dev = profile.get_device();
-    auto sensor = dev.first<rs2::depth_sensor>();
-
-    // 关闭自动曝光
-    if (sensor.supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
-    {
-      sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
-    }
-
-    // 手动曝光时间（微秒）
-    if (sensor.supports(RS2_OPTION_EXPOSURE))
-    {
-      sensor.set_option(RS2_OPTION_EXPOSURE, 3000); // 3 ms
-    }
-
-    // 增益
-    if (sensor.supports(RS2_OPTION_GAIN))
-    {
-      sensor.set_option(RS2_OPTION_GAIN, 64);
     }
   }
   catch (const std::exception &e)
@@ -94,39 +72,15 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
     ROS_ERROR_STREAM("ObjectDetector: Failed to initialize RealSense grabber: " << e.what());
     throw;
   }
-
-  // ----------------- 2. 相机内参 & 旋转后相机模型 -----------------
-  cam = g.getCameraParameters(RS2_STREAM_COLOR,
-                              vpCameraParameters::perspectiveProjWithoutDistortion);
-
-  double fx = cam.get_px();
-  double fy = cam.get_py();
-  double u0 = cam.get_u0();
-  double v0 = cam.get_v0();
-  unsigned int W = 640; // 旋转前宽度
-  unsigned int H = 480; // 旋转前高度
-
-  if (clockwise)
-  {
-    // 你原来用的 Kannala-Brandt 标定参数，直接沿用
-    cam_rot.initProjWithKannalaBrandtDistortion(
+  // 你原来用的 Kannala-Brandt 标定参数，直接沿用
+  cam_rot.initProjWithKannalaBrandtDistortion(
       392.5919623095264, 394.6504822990919,
       238.78379511684258, 322.6289796142194,
       std::vector<double>{
-        0.29186846588871074,
-        0.1618033745553163,
-        0.065934344194105,
-        0.0270748559249096});
-  }
-  else
-  {
-    // 逆时针 90°
-    cam_rot.initPersProjWithoutDistortion(
-      /*fx=*/fy,
-      /*fy=*/fx,
-      /*u0=*/v0,
-      /*v0=*/(double)(W - 1) - u0);
-  }
+          0.29186846588871074,
+          0.1618033745553163,
+          0.065934344194105,
+          0.0270748559249096});
 
   // ----------------- 3. AprilTag 检测器配置 -----------------
   tag_detector.setAprilTagQuadDecimate(2);
@@ -138,12 +92,12 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
 
   // ----------------- 4. 位姿相关变量初始化 -----------------
   Position_before = Eigen::Vector3d::Zero();
-  Position_after  = Eigen::Vector3d::Zero();
+  Position_after = Eigen::Vector3d::Zero();
 
   // IMU -> camera 的旋转矩阵（你原来的数值）
   R_i2c << 0.0141, -0.9999, 0.0078,
-          -0.9997, -0.0142, -0.0181,
-           0.0183, -0.0076, -0.9998;
+      -0.9997, -0.0142, -0.0181,
+      0.0183, -0.0076, -0.9998;
 
   // 做一下正规化，避免数值上不是严格旋转矩阵
   {
@@ -233,24 +187,36 @@ void ObjectDetector::publishDetectionResult(ros::Time &ts, bool is_fault)
   }
 }
 
+// ============ 固定 40 ms 处理延时（相对于图像时间戳） ============
 void ObjectDetector::baseProcess(ros::Time ts, bool is_fault)
 {
-  // 目标：从 ts 开始，延迟 PROCESSING_LATENCY 秒再发布
-  ros::Duration delay =
-      ros::Duration(PROCESSING_LATENCY) - (ros::Time::now() - ts);
+  // 1. 用 ROS 时间计算从图像时间戳到现在已经过去多久
+  const double elapsed = (ros::Time::now() - ts).toSec();
+  const double remain = PROCESSING_LATENCY - elapsed;
 
-  if (delay.toSec() > 0.0)
+  // 2. 真正 sleep 用 wall time，避免 use_sim_time 或 /clock 停住导致永久阻塞
+  if (remain > 0.0)
   {
-    delay.sleep();
+    ros::WallDuration(remain).sleep();
+  }
+
+  // 如果系统已经在关闭，就别再发布了（保险一点）
+  if (!ros::ok() || stop_thread.load(std::memory_order_acquire))
+  {
+    return;
   }
 
   publishDetectionResult(ts, is_fault);
 }
 
+// ============ 主处理线程：目标每 60 ms 执行一轮 while ============
 void ObjectDetector::processImages()
 {
   while (ros::ok() && !stop_thread.load(std::memory_order_acquire))
   {
+    // 本轮循环开始时间（用于控制 60 ms 周期）
+    auto loop_start = steady_clock::now();
+
     ros::Time image_timestamp;
     bool fault_detected = false;
 
@@ -319,15 +285,17 @@ void ObjectDetector::processImages()
                                   q_w2a.x() * q_w2a.y());
         double cosy_cosp = 1.0 - 2.0 * (q_w2a.y() * q_w2a.y() +
                                         q_w2a.z() * q_w2a.z());
-        desired_yaw = std::atan2(siny_cosp, cosy_cosp) + M_PI / 2.0;
+        desired_yaw = atan2(siny_cosp, cosy_cosp) + M_PI / 2.0;
 
         lost_target = false;
 
         static int print_count = 0;
         if (++print_count % 10 == 0)
         {
-          std::cout << "[Aruco] Position_after: "
-                    << Position_after.transpose() << std::endl;
+          cout << "[Aruco] Position_after: "
+               << Position_after.transpose() << std::endl;
+          cout << "[Aruco] Desired yaw (rad): "
+               << desired_yaw << std::endl;
         }
       }
       else
@@ -344,12 +312,28 @@ void ObjectDetector::processImages()
 
     // 5. 相对于图像时间戳的固定延时 + 发布
     baseProcess(image_timestamp, fault_detected);
+
+    // ========== 控制整轮循环的周期为 60 ms ==========
+    auto loop_end = steady_clock::now();
+    auto elapsed = duration_cast<milliseconds>(loop_end - loop_start);
+
+    if (elapsed < LOOP_PERIOD)
+    {
+      auto sleep_dur = LOOP_PERIOD - elapsed;
+
+      // 如果在这期间已经请求退出，就不要再多 sleep 了
+      if (!stop_thread.load(std::memory_order_acquire) && ros::ok())
+      {
+        std::this_thread::sleep_for(sleep_dur);
+      }
+    }
+    // 如果 elapsed >= 60 ms，就不再额外 sleep，直接进入下一轮
   }
 }
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "object_detector");  // 节点名
+  ros::init(argc, argv, "object_detector"); // 节点名
   ros::NodeHandle nh;
 
   ObjectDetector detector(nh);
@@ -357,4 +341,3 @@ int main(int argc, char **argv)
 
   return 0;
 }
-

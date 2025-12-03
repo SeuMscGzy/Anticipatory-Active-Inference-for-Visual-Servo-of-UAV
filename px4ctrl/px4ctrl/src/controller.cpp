@@ -36,7 +36,7 @@ public:
       integral_error = 1 * integral_error / abs(integral_error);
     }
     double u_pid = Kp * error + Ki * integral_error;
-    if (abs(u_pid > 2))
+    if (abs(u_pid) > 2)
     {
       u_pid = 2 * u_pid / abs(u_pid);
     }
@@ -68,6 +68,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
     velocity_controller_x.init();
     velocity_controller_y.init();
     velocity_controller_z.init();
+    des_acc.setZero();
     u.acc[0] = 0;
     u.acc[1] = 0;
     u.acc[2] = -1;
@@ -140,7 +141,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
 
   Eigen::Matrix3d R_curr = odom.q.toRotationMatrix();
   Eigen::Vector3d b3_curr = R_curr.col(2); // 机体 z 轴在世界系中的方向
-  u.thrust = computeDesiredCollectiveThrustSignal(des_acc.dot(b3_curr)); 
+  u.thrust = computeDesiredCollectiveThrustSignal(des_acc.dot(b3_curr));
   if (state_count == 1)
   {
     u.thrust = 0.01;

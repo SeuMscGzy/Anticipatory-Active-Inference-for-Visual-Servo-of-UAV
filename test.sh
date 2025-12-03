@@ -21,16 +21,12 @@ rosrun fake_pose_publisher fake_pose_pub & sleep 1;
 #rosrun topic_tools relay /vrpn_client_node/MCServer/0/pose /mavros/vision_pose/pose & sleep 2;
 
 
-#切换无人机跟踪偏置的节点
-#rosrun Keyboard_change_bias Keyboard_change_bias & sleep 1;
-#rosrun RSM2 RSM2 & sleep 1;
 rosrun Relative_Pos_Cal Relative_Pos_Cal & sleep 2;
-#rosrun Second_order_system Second_order_system & sleep 1;
 
 #rosrun Model_Predictive_Active_Inference testnode_mpai & sleep 1;
 
 #无人机offboard状态机节点
-#roslaunch px4ctrl run_ctrl.launch & sleep 1;
+roslaunch px4ctrl run_ctrl.launch & sleep 1;
 
 #rosrun RAID_AgiVS_for_car_tracking RAIDAgiVS & sleep 1;
 

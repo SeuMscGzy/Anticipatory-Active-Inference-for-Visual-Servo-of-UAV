@@ -139,9 +139,9 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   // 6) 和你原来的坐标系补偿拼在一起
   u.q = imu.q * odom.q.inverse() * q_des;
 
-  Eigen::Matrix3d R_curr = odom.q.toRotationMatrix();
-  Eigen::Vector3d b3_curr = R_curr.col(2); // 机体 z 轴在世界系中的方向
+  Eigen::Vector3d b3_curr = odom.q.toRotationMatrix().col(2); // 机体 z 轴在世界系中的方向
   u.thrust = computeDesiredCollectiveThrustSignal(des_acc.dot(b3_curr));
+  double cos_tilt = b3_curr.dot(e3);
   if (state_count == 1)
   {
     u.thrust = 0.01;
@@ -186,7 +186,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   last_thrust = u.thrust;
   if (takeoff_count >= 500)
   {
-    timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), u.thrust));
+    timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), cos_tilt * u.thrust));
   }
   while (timed_thrust_.size() > 100)
   {

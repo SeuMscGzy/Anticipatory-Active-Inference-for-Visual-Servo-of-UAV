@@ -98,6 +98,9 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
   R_i2c << 0.0141, -0.9999, 0.0078,
       -0.9997, -0.0142, -0.0181,
       0.0183, -0.0076, -0.9998;
+  R_tagfix << 0, -1, 0,
+      1, 0, 0,
+      0, 0, 1;
 
   // 做一下正规化，避免数值上不是严格旋转矩阵
   {
@@ -277,15 +280,10 @@ void ObjectDetector::processImages()
           for (int j = 0; j < 3; ++j)
             R_c2a(i, j) = R_c2a_vp[i][j];
 
-        R_w2a = R_w2c_local * R_c2a;
-        Eigen::Quaterniond q_w2a(R_w2a);
+        // 2) 拼旋转链
+        Eigen::Matrix3d R_w2a = R_w2c_local * R_c2a * R_tagfix;
 
-        // 从四元数里提取 yaw（绕 Z），再加 90 度偏置
-        double siny_cosp = 2.0 * (q_w2a.w() * q_w2a.z() +
-                                  q_w2a.x() * q_w2a.y());
-        double cosy_cosp = 1.0 - 2.0 * (q_w2a.y() * q_w2a.y() +
-                                        q_w2a.z() * q_w2a.z());
-        desired_yaw = atan2(siny_cosp, cosy_cosp) + M_PI / 2.0;
+        desired_yaw = std::atan2(R_w2a(1, 0), R_w2a(0, 0));
 
         lost_target = false;
 

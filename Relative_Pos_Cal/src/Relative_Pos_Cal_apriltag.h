@@ -65,6 +65,9 @@ public:
     Eigen::Matrix3d R_i2c;
     Eigen::Matrix3d R_w2c;
     Eigen::Matrix3d R_w2a;
+    // 如果你的“前”是 tag 的上方(-y)，改成 -M_PI/2.0
+
+    Eigen::Matrix3d R_tagfix;
     bool clockwise = true;
 
     vpRealSense2 g;

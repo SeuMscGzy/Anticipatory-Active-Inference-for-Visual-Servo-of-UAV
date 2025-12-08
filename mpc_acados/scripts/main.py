@@ -34,6 +34,12 @@ class AcadosTrackingNode:
         self.ground_truth_pose_sub = rospy.Subscriber(
             "/mavros/local_position/pose",
             PoseStamped, self.ground_truth_pose_callback, queue_size=1)
+        self.ground_truth_sub = rospy.Subscriber(
+            "/vrpn_client_node/Tracker0/0/twist",
+            TwistStamped, self.ground_truth_callback_car, queue_size=1)
+        self.ground_truth_pose_sub = rospy.Subscriber(
+            "/vrpn_client_node/Tracker0/0/pose",
+            PoseStamped, self.ground_truth_pose_callback_car, queue_size=1)
 
         self.x0 = np.zeros(self.model.x.size()[0])
         self.u0 = np.zeros(self.model.u.size()[0])
@@ -46,6 +52,14 @@ class AcadosTrackingNode:
         self.ground_truth_x = 0.0
         self.ground_truth_y = 0.0
         self.ground_truth_z = 0.0
+
+        self.ground_truth_first_deri_x_car = 0.0
+        self.ground_truth_first_deri_y_car = 0.0
+        self.ground_truth_first_deri_z_car = 0.0
+
+        self.ground_truth_x_car = 0.0
+        self.ground_truth_y_car = 0.0
+        self.ground_truth_z_car = 0.0
 
         rospy.loginfo("Acados Tracking Node init。")
 
@@ -72,22 +86,28 @@ class AcadosTrackingNode:
 
         # Publish hat_x message (Float64MultiArray type)
         msg1 = Float64MultiArray()
-        msg1.data = [0.0] * 18  # Initialize with 18 zeros
+        msg1.data = [0.0] * 24  # Initialize with 24 zeros
 
         msg1.data[2] = self.u0[0]
         msg1.data[3] = self.filter1.x_real
         msg1.data[4] = self.ground_truth_x
         msg1.data[5] = self.ground_truth_first_deri_x
+        msg1.data[6] = self.ground_truth_x_car
+        msg1.data[7] = self.ground_truth_first_deri_x_car
 
-        msg1.data[8] = self.u0[1]
-        msg1.data[9] = self.filter1.y_real
-        msg1.data[10] = self.ground_truth_y
-        msg1.data[11] = self.ground_truth_first_deri_y
+        msg1.data[10] = self.u0[1]
+        msg1.data[11] = self.filter1.y_real
+        msg1.data[12] = self.ground_truth_y
+        msg1.data[13] = self.ground_truth_first_deri_y
+        msg1.data[14] = self.ground_truth_y_car
+        msg1.data[15] = self.ground_truth_first_deri_y_car
 
-        msg1.data[14] = self.u0[2]
-        msg1.data[15] = self.filter1.z_real
-        msg1.data[16] = self.ground_truth_z
-        msg1.data[17] = self.ground_truth_first_deri_z
+        msg1.data[18] = self.u0[2]
+        msg1.data[19] = self.filter1.z_real
+        msg1.data[20] = self.ground_truth_z
+        msg1.data[21] = self.ground_truth_first_deri_z
+        msg1.data[22] = self.ground_truth_z_car
+        msg1.data[23] = self.ground_truth_first_deri_z_car
 
         self.pub_hat_x.publish(msg1)
 
@@ -96,7 +116,7 @@ class AcadosTrackingNode:
         self.x0 = np.array([
             self.filter1.x_real,
             self.filter1.y_real,
-            self.filter1.z_real + 1,
+            self.filter1.z_real + 0.8,
             self.filter1.x_filtered_deri,
             self.filter1.y_filtered_deri,
             self.filter1.z_filtered_deri
@@ -117,6 +137,18 @@ class AcadosTrackingNode:
         self.ground_truth_x = msg.pose.position.x
         self.ground_truth_y = msg.pose.position.y
         self.ground_truth_z = msg.pose.position.z
+    
+    def ground_truth_callback_car(self, msg):
+        # Update ground truth velocities for car
+        self.ground_truth_first_deri_x_car = msg.twist.linear.x
+        self.ground_truth_first_deri_y_car = msg.twist.linear.y
+        self.ground_truth_first_deri_z_car = msg.twist.linear.z
+    
+    def ground_truth_pose_callback_car(self, msg):
+        # Update ground truth position for car
+        self.ground_truth_x_car = msg.pose.position.x
+        self.ground_truth_y_car = msg.pose.position.y
+        self.ground_truth_z_car = msg.pose.position.z
 
 def main():
     rospy.init_node("acados_tracking_node", anonymous=True)

@@ -169,6 +169,8 @@ public:
     std::array<double, 10> optical_xyz{};
     std::atomic<double> ground_truth_x, ground_truth_y, ground_truth_z;
     std::atomic<double> ground_truth_first_deri_x, ground_truth_first_deri_y, ground_truth_first_deri_z;
+    std::atomic<double> ground_truth_x_car, ground_truth_y_car, ground_truth_z_car;
+    std::atomic<double> ground_truth_first_deri_x_car, ground_truth_first_deri_y_car, ground_truth_first_deri_z_car;
 
     APO APOX, APOY, APOZ;
 
@@ -185,6 +187,8 @@ public:
     ros::Subscriber relative_pos_sub;
     ros::Subscriber ground_truth_sub;
     ros::Subscriber ground_truth_pose_sub;
+    ros::Subscriber ground_truth_sub_car;
+    ros::Subscriber ground_truth_pose_sub_car;
     ros::Publisher pub_hat_x;
 
     // 控制线程
@@ -199,4 +203,6 @@ public:
     void relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg);
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg);
     void ground_truth_pose_callback(const geometry_msgs::PoseStamped::ConstPtr &msg);
+    void ground_truth_callback_car(const geometry_msgs::TwistStamped::ConstPtr &msg);
+    void ground_truth_pose_callback_car(const geometry_msgs::PoseStamped::ConstPtr &msg);
 };

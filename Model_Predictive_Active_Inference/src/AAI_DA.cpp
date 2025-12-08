@@ -5,8 +5,8 @@
 AAI_DA::AAI_DA(ros::NodeHandle &nh)
     : px4_state(3),
       des_yaw(0.0),
-      ground_truth_x(0.0), ground_truth_y(0.0), ground_truth_z(0.0),
-      ground_truth_first_deri_x(0.0), ground_truth_first_deri_y(0.0), ground_truth_first_deri_z(0.0),
+      ground_truth_x(0.0), ground_truth_y(0.0), ground_truth_z(0.0), ground_truth_first_deri_x(0.0), ground_truth_first_deri_y(0.0), ground_truth_first_deri_z(0.0),
+      ground_truth_x_car(0.0), ground_truth_y_car(0.0), ground_truth_z_car(0.0), ground_truth_first_deri_x_car(0.0), ground_truth_first_deri_y_car(0.0), ground_truth_first_deri_z_car(0.0),
       optimizer_xyz(dt, Np, precice_z1, precice_z2, precice_w1, precice_w2, precice_z_u, e1, umin, umax)
 {
   acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
@@ -16,6 +16,8 @@ AAI_DA::AAI_DA(ros::NodeHandle &nh)
                                   this, ros::TransportHints().tcpNoDelay());
   ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &AAI_DA::ground_truth_callback, this);
   ground_truth_pose_sub = nh.subscribe("/mavros/local_position/pose", 10, &AAI_DA::ground_truth_pose_callback, this);
+  ground_truth_sub_car = nh.subscribe("/vrpn_client_node/Tracker0/0/twist", 10, &AAI_DA::ground_truth_callback_car, this);
+  ground_truth_pose_sub_car = nh.subscribe("/vrpn_client_node/Tracker0/0/pose", 10, &AAI_DA::ground_truth_pose_callback_car, this);
   pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/aic2_xyz", 1);
 
   startControlLoops();
@@ -37,7 +39,7 @@ void AAI_DA::xyzAxisControlLoop()
 {
   ros::Rate rate(50);
   std_msgs::Float64MultiArray hat_msg;
-  hat_msg.data.assign(18, 0.0);
+  hat_msg.data.assign(24, 0.0);
   const Eigen::Vector3d zero_acc = Eigen::Vector3d::Zero();
 
   acc_msg.position.x = acc_msg.position.y = acc_msg.position.z = 0;
@@ -46,7 +48,8 @@ void AAI_DA::xyzAxisControlLoop()
   acc_msg.yaw_dot = 0;
   acc_msg.header.frame_id = "world";
 
-  auto publishAcc = [&](const Eigen::Vector3d &acc) {
+  auto publishAcc = [&](const Eigen::Vector3d &acc)
+  {
     acc_msg.acceleration.x = acc.x();
     acc_msg.acceleration.y = acc.y();
     acc_msg.acceleration.z = acc.z();
@@ -55,25 +58,32 @@ void AAI_DA::xyzAxisControlLoop()
     acc_cmd_pub.publish(acc_msg);
   };
 
-  auto publishHat = [&](const Eigen::Vector3d &acc) {
+  auto publishHat = [&](const Eigen::Vector3d &acc)
+  {
     hat_msg.data[0] = APOX.hat_x(0);
     hat_msg.data[1] = APOX.hat_x(1);
     hat_msg.data[2] = acc.x();
     hat_msg.data[3] = APOX.y_real;
     hat_msg.data[4] = ground_truth_x.load(std::memory_order_relaxed);
     hat_msg.data[5] = ground_truth_first_deri_x.load(std::memory_order_relaxed);
-    hat_msg.data[6] = APOY.hat_x(0);
-    hat_msg.data[7] = APOY.hat_x(1);
-    hat_msg.data[8] = acc.y();
-    hat_msg.data[9] = APOY.y_real;
-    hat_msg.data[10] = ground_truth_y.load(std::memory_order_relaxed);
-    hat_msg.data[11] = ground_truth_first_deri_y.load(std::memory_order_relaxed);
-    hat_msg.data[12] = APOZ.hat_x(0);
-    hat_msg.data[13] = APOZ.hat_x(1);
-    hat_msg.data[14] = acc.z();
-    hat_msg.data[15] = APOZ.y_real;
-    hat_msg.data[16] = ground_truth_z.load(std::memory_order_relaxed);
-    hat_msg.data[17] = ground_truth_first_deri_z.load(std::memory_order_relaxed);
+    hat_msg.data[6] = ground_truth_x_car.load(std::memory_order_relaxed);
+    hat_msg.data[7] = ground_truth_first_deri_x_car.load(std::memory_order_relaxed);
+    hat_msg.data[8] = APOY.hat_x(0);
+    hat_msg.data[9] = APOY.hat_x(1);
+    hat_msg.data[10] = acc.y();
+    hat_msg.data[11] = APOY.y_real;
+    hat_msg.data[12] = ground_truth_y.load(std::memory_order_relaxed);
+    hat_msg.data[13] = ground_truth_first_deri_y.load(std::memory_order_relaxed);
+    hat_msg.data[14] = ground_truth_y_car.load(std::memory_order_relaxed);
+    hat_msg.data[15] = ground_truth_first_deri_y_car.load(std::memory_order_relaxed);
+    hat_msg.data[16] = APOZ.hat_x(0);
+    hat_msg.data[17] = APOZ.hat_x(1);
+    hat_msg.data[18] = acc.z();
+    hat_msg.data[19] = APOZ.y_real;
+    hat_msg.data[20] = ground_truth_z.load(std::memory_order_relaxed);
+    hat_msg.data[21] = ground_truth_first_deri_z.load(std::memory_order_relaxed);
+    hat_msg.data[22] = ground_truth_z_car.load(std::memory_order_relaxed);
+    hat_msg.data[23] = ground_truth_first_deri_z_car.load(std::memory_order_relaxed);
     pub_hat_x.publish(hat_msg);
   };
 
@@ -120,12 +130,26 @@ void AAI_DA::ground_truth_pose_callback(const geometry_msgs::PoseStamped::ConstP
   ground_truth_z.store(msg->pose.position.z, std::memory_order_relaxed);
 }
 
+void AAI_DA::ground_truth_callback_car(const geometry_msgs::TwistStamped::ConstPtr &msg)
+{
+  ground_truth_first_deri_x_car.store(msg->twist.linear.x, std::memory_order_relaxed);
+  ground_truth_first_deri_y_car.store(msg->twist.linear.y, std::memory_order_relaxed);
+  ground_truth_first_deri_z_car.store(msg->twist.linear.z, std::memory_order_relaxed);
+}
+
+void AAI_DA::ground_truth_pose_callback_car(const geometry_msgs::PoseStamped::ConstPtr &msg)
+{
+  ground_truth_x_car.store(msg->pose.position.x, std::memory_order_relaxed);
+  ground_truth_y_car.store(msg->pose.position.y, std::memory_order_relaxed);
+  ground_truth_z_car.store(msg->pose.position.z, std::memory_order_relaxed);
+}
+
 void AAI_DA::relative_pos_Callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
 {
   des_yaw.store(msg->data[5], std::memory_order_relaxed);
   APOX.pushMeasurement(msg->data[0], msg->data[4]);
   APOY.pushMeasurement(msg->data[1], msg->data[4]);
-  APOZ.pushMeasurement(msg->data[2] + 1, msg->data[4]);
+  APOZ.pushMeasurement(msg->data[2] + 0.8, msg->data[4]);
 }
 
 void AAI_DA::StateCallback(const std_msgs::Int32::ConstPtr &msg)

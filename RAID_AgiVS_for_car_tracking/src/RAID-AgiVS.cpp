@@ -36,7 +36,7 @@ private:
     const double T_c = 0.02;
     double x_bias = 0;
     double y_bias = 0;
-    double z_bias = 1;
+    double z_bias = 0.8;
     double y1_APO_fast_bias = 0;
     ros::NodeHandle nh;
 
@@ -266,12 +266,15 @@ private:
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber relative_position_sub, ground_truth_sub, ground_truth_pose_sub, px4_state_sub;
+    ros::Subscriber ground_truth_sub_car, ground_truth_pose_sub_car;
     ros::Publisher pub_hat_x, acc_cmd_pub;
     quadrotor_msgs::PositionCommand acc_msg;
     double des_yaw;
     ros::Timer control_update_timer;
     double ground_truth_first_deri_x = 0, ground_truth_first_deri_y = 0, ground_truth_first_deri_z = 0;
+    double ground_truth_first_deri_x_car = 0, ground_truth_first_deri_y_car = 0, ground_truth_first_deri_z_car = 0;
     double ground_truth_x = 0, ground_truth_y = 0, ground_truth_z = 0;
+    double ground_truth_x_car = 0, ground_truth_y_car = 0, ground_truth_z_car = 0;
 
 public:
     TripleAxisController()
@@ -281,6 +284,8 @@ public:
         relative_position_sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this, ros::TransportHints().tcpNoDelay());
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/mavros/local_position/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
+        ground_truth_sub_car = nh.subscribe("/vrpn_client_node/Tracker0/0/twist", 10, &TripleAxisController::ground_truth_callback_car, this);
+        ground_truth_pose_sub_car = nh.subscribe("/vrpn_client_node/Tracker0/0/pose", 10, &TripleAxisController::ground_truth_pose_callback_car, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
         control_update_timer = nh.createTimer(ros::Duration(0.02), &TripleAxisController::controlUpdate, this);
@@ -316,6 +321,20 @@ public:
         ground_truth_z = msg->pose.position.z;
     }
 
+    void ground_truth_callback_car(const geometry_msgs::TwistStamped::ConstPtr &msg)
+    {
+        ground_truth_first_deri_x_car = msg->twist.linear.x;
+        ground_truth_first_deri_y_car = msg->twist.linear.y;
+        ground_truth_first_deri_z_car = msg->twist.linear.z;
+    }
+
+    void ground_truth_pose_callback_car(const geometry_msgs::PoseStamped::ConstPtr &msg)
+    {
+        ground_truth_x_car = msg->pose.position.x;
+        ground_truth_y_car = msg->pose.position.y;
+        ground_truth_z_car = msg->pose.position.z;
+    }
+
     void controlUpdate(const ros::TimerEvent &)
     {
         // 1. 先更新三个轴的控制（严格 50 Hz）
@@ -340,17 +359,17 @@ public:
         acc_msg.header.stamp = ros::Time::now();
         acc_cmd_pub.publish(acc_msg);
         std_msgs::Float64MultiArray msg1;
-        msg1.data.resize(18);
+        msg1.data.resize(24);
 
         for (int i = 0; i < 2; i++)
         {
             msg1.data[i] = controllerX.hat_x(i);
         }
-        for (int i = 6; i < 8; i++)
+        for (int i = 8; i < 10; i++)
         {
             msg1.data[i] = controllerY.hat_x(i - 6);
         }
-        for (int i = 12; i < 14; i++)
+        for (int i = 16; i < 18; i++)
         {
             msg1.data[i] = controllerZ.hat_x(i - 12);
         }
@@ -358,16 +377,22 @@ public:
         msg1.data[3] = controllerX.y_real;
         msg1.data[4] = ground_truth_x;
         msg1.data[5] = ground_truth_first_deri_x;
+        msg1.data[6] = ground_truth_x_car;
+        msg1.data[7] = ground_truth_first_deri_x_car;
 
-        msg1.data[8] = controllerY.u;
-        msg1.data[9] = controllerY.y_real;
-        msg1.data[10] = ground_truth_y;
-        msg1.data[11] = ground_truth_first_deri_y;
+        msg1.data[10] = controllerY.u;
+        msg1.data[11] = controllerY.y_real;
+        msg1.data[12] = ground_truth_y;
+        msg1.data[13] = ground_truth_first_deri_y;
+        msg1.data[14] = ground_truth_y_car;
+        msg1.data[15] = ground_truth_first_deri_y_car;
 
-        msg1.data[14] = controllerZ.u;
-        msg1.data[15] = controllerZ.y_real;
-        msg1.data[16] = ground_truth_z;
-        msg1.data[17] = ground_truth_first_deri_z;
+        msg1.data[18] = controllerZ.u;
+        msg1.data[19] = controllerZ.y_real;
+        msg1.data[20] = ground_truth_z;
+        msg1.data[21] = ground_truth_first_deri_z;
+        msg1.data[22] = ground_truth_z_car;
+        msg1.data[23] = ground_truth_first_deri_z_car;
         pub_hat_x.publish(msg1);
     }
 

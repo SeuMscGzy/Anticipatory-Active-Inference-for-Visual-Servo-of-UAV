@@ -281,7 +281,7 @@ void ObjectDetector::processImages()
             R_c2a(i, j) = R_c2a_vp[i][j];
 
         // 2) 拼旋转链
-        Eigen::Matrix3d R_w2a = R_w2c_local * R_c2a * R_tagfix;
+        R_w2a = R_w2c_local * R_c2a * R_tagfix;
 
         desired_yaw = std::atan2(R_w2a(1, 0), R_w2a(0, 0));
 

@@ -184,6 +184,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   last_in_the_slow_thrust = in_the_slow_thrust;
   last_state_count = state_count;
   last_thrust = u.thrust;
+
   if (takeoff_count >= 500)
   {
     timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), cos_tilt * u.thrust));
@@ -204,6 +205,14 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   debug_msg_.des_q_y = u.q.y();
   debug_msg_.des_q_z = u.q.z();
   debug_msg_.des_q_w = u.q.w();
+  static int count_ = 0;
+  count_++;
+  if (count_ % 30 == 0)
+  {
+    cout << "thr2acc_: " << thr2acc_ << endl;
+    cout << "des_acc: " << des_acc.transpose() << ", thrust: " << u.thrust << endl;
+    count_ = 0;
+  }
   return debug_msg_;
 }
 
@@ -255,7 +264,6 @@ bool LinearControl::estimateThrustModel(
       thr2acc_ = thr2acc_ + K * (est_a(2) - thr * thr2acc_);
       P_ = (1 - K * thr) * P_ / rho2_;
     }
-    // cout << thr2acc_ << endl;
     return true;
   }
   return false;

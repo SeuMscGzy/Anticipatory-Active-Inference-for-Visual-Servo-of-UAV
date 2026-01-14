@@ -35,7 +35,7 @@ The hardware architecture is designed for low-latency control:
 
 To achieve precise model-based control (as required by the AAI framework), accurate identification of the propulsion system parameters (thrust coefficients $k_1, k_2, k_3$) is essential. We designed a custom thrust test stand to collect ground truth data mapping rotor speed (RPM) to thrust.
 
-![Thrust Test Platform](thrust test platform.png)
+![Thrust Test Platform](thrust%20test%20platform.png)
 
 ### Features
 * **Mechanism**: A lever-arm structure with a sliding rail ensures linear force transmission to the load cell.

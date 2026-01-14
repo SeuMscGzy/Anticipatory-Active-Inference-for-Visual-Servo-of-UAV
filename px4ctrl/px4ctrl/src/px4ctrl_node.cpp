@@ -34,16 +34,9 @@ int main(int argc, char *argv[])
                                                  boost::bind(&ExtendedState_Data_t::feed, &fsm.extended_state_data, _1));
 
     ros::Subscriber odom_sub =
-        nh.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom",
+        nh.subscribe<nav_msgs::Odometry>("/odom_from_mocap",
                                          100,
                                          boost::bind(&Odom_Data_t::feed, &fsm.odom_data, _1),
-                                         ros::VoidConstPtr(),
-                                         ros::TransportHints().tcpNoDelay());
-
-    ros::Subscriber odom_mavros_sub =
-        nh.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom1",
-                                         100,
-                                         boost::bind(&Odom_Data_t::feed, &fsm.odom_data_mavros, _1),
                                          ros::VoidConstPtr(),
                                          ros::TransportHints().tcpNoDelay());
 

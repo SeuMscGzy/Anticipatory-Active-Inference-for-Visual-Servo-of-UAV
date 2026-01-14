@@ -59,12 +59,12 @@ Optimizer::Optimizer(double dt, int Np,
 
     // 闭环矩阵 Closed_A = Ad - K
     MatrixXd K(6, 6);
-    K << 0.7, 0,   0,   0,    0,    0,
-         0,   0.7, 0,   0,    0,    0,
-         0,   0,   0.7, 0,    0,    0,
-         0,   0,   0,   0.15, 0,    0,
-         0,   0,   0,   0,    0.15, 0,
-         0,   0,   0,   0,    0,    0.15;
+    K << 0.8, 0,   0,   0,    0,    0,
+         0,   0.8, 0,   0,    0,    0,
+         0,   0,   0.8, 0,    0,    0,
+         0,   0,   0,   0.3, 0,    0,
+         0,   0,   0,   0,    0.3, 0,
+         0,   0,   0,   0,    0,    0.3;
     MatrixXd Closed_A = Ad - K;
 
     VectorXd zr(6);
@@ -233,7 +233,7 @@ std::array<double, 10> Optimizer::optimize(const Vector3d &x,
     xLowerScratch_.segment<3>(muIdx + 3)  = mu_p_init;
     xUpperScratch_.segment<3>(muIdx + 3)  = mu_p_init;
 
-    int nWSR = 100;
+    int nWSR = 500;
     returnValue ret =
         qpSolver_.hotstart(q_.data(),
                            xLowerScratch_.data(),
@@ -244,7 +244,7 @@ std::array<double, 10> Optimizer::optimize(const Vector3d &x,
     {
         // hotstart 失败就重置并重新 init
         qpSolver_.reset();
-        int nWSRInit = 500;
+        int nWSRInit = 1000;
         ret = qpSolver_.init(hessianRowMajor_.data(),
                              q_.data(),
                              xLowerScratch_.data(),
@@ -291,7 +291,7 @@ void Optimizer::initSolver()
     options.printLevel        = PL_NONE; // 如需调试可改为 PL_MEDIUM
     qpSolver_.setOptions(options);
 
-    int nWSR = 100;
+    int nWSR = 1000;
     returnValue ret =
         qpSolver_.init(hessianRowMajor_.data(),
                        q_.data(),

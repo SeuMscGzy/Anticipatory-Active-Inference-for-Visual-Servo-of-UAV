@@ -1,93 +1,98 @@
-#ifndef OBJECT_DETECTOR_H
-#define OBJECT_DETECTOR_H
+#pragma once
 
-#include "ros/time.h"
+#include <ros/ros.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/Image.h>
+#include <std_msgs/Float64MultiArray.h>
+
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-#include <apriltag/apriltag.h>
-#include <apriltag/tag36h11.h>
-#include <chrono>
-#include <condition_variable>
-#include <cv_bridge/cv_bridge.h>
-#include <memory>
-#include <mutex>
-#include <nav_msgs/Odometry.h>
-#include <opencv2/core/eigen.hpp>
-#include <opencv2/opencv.hpp>
-#include <ros/ros.h>
-#include <sensor_msgs/image_encodings.h>
-#include <std_msgs/Float64MultiArray.h>
-#include <thread>
-#include <unordered_map>
-#include <vector>
-#include <stdexcept>
+
 #include <librealsense2/rs.hpp>
-#include <visp3/core/vpConfig.h>
-#include <visp3/sensor/vpV4l2Grabber.h>
-#include <visp3/sensor/vp1394CMUGrabber.h>
-#include <visp3/sensor/vp1394TwoGrabber.h>
-#include <visp3/sensor/vpFlyCaptureGrabber.h>
-#include <visp3/sensor/vpRealSense2.h>
-#include <visp3/detection/vpDetectorAprilTag.h>
-#include <visp3/gui/vpDisplayGDI.h>
+
+#include <visp3/core/vpImage.h>
+#include <visp3/core/vpCameraParameters.h>
+#include <visp3/core/vpHomogeneousMatrix.h>
+#include <visp3/core/vpRotationMatrix.h>
 #include <visp3/core/vpImageConvert.h>
-#include <visp3/gui/vpDisplayX.h>
-#include <visp3/core/vpXmlParserCamera.h>
-#include <visp3/core/vpImageTools.h>
-#include <visp3/core/vpImageFilter.h>
-#include <sensor_msgs/Imu.h>
-#include <fstream>
-#include <librealsense2/rs_advanced_mode.hpp> // 注意要包含这个头
-using namespace std;
-using namespace std::chrono;
+#include <visp3/detection/vpDetectorAprilTag.h>
+
+#include <deque>
+#include <mutex>
+#include <algorithm>
 
 class ObjectDetector
 {
 public:
-    ros::NodeHandle nh_;
-    ros::Publisher point_pub_;
-    ros::Publisher cv_image_pub;
-    ros::Subscriber odom_sub_;
-    ros::Publisher image_pub;
-    ros::Timer timer;
-    thread worker_thread;
-
-    std::atomic<bool> stop_thread;
-    std::atomic<bool> processing;
-    std::mutex data_mutex;
-    std::mutex R_mutex;
-    std::condition_variable cv;
-
-    bool lost_target;
-    double desired_yaw;
-    Eigen::Vector3d Position_before, Position_after;
-    Eigen::Matrix3d R_c2a;
-    Eigen::Matrix3d R_i2c;
-    Eigen::Matrix3d R_w2c;
-    Eigen::Matrix3d R_w2a;
-    // 如果你的“前”是 tag 的上方(-y)，改成 -M_PI/2.0
-
-    Eigen::Matrix3d R_tagfix;
-    bool clockwise = true;
-
-    vpRealSense2 g;
-    rs2::config config;
-    vpCameraParameters cam;
-    vpCameraParameters cam_rot;
-    vpDetectorAprilTag tag_detector;
-
-    std_msgs::Float64MultiArray point_;
-    ObjectDetector(ros::NodeHandle &nh);
+    explicit ObjectDetector(ros::NodeHandle &nh);
     ~ObjectDetector();
+
     void start();
 
 private:
-    void timerCallback(const ros::TimerEvent &);
-    void odomCallback(const sensor_msgs::Imu::ConstPtr &msg);
-    void baseProcess(ros::Time ts, bool is_fault);
-    void publishDetectionResult(ros::Time &ts, bool is_fault);
-    double fromQuaternion2yaw(const Eigen::Quaterniond &q);
-    void processImages();
-};
+    // ===== ROS =====
+    ros::NodeHandle nh_;
+    ros::Publisher point_pub_;
+    ros::Publisher image_pub_;
+    ros::Subscriber odom_sub_;
 
-#endif // OBJECT_DETECTOR_H
+    // ===== RealSense (native librealsense) =====
+    rs2::pipeline pipe_;
+    rs2::config cfg_;
+    rs2::pipeline_profile profile_;
+    int width_ = 1280;
+    int height_ = 720;
+    int fps_ = 30;
+    /*int width_ = 640;
+    int height_ = 480;
+    int fps_ = 60;*/
+
+    bool have_dev2ros_offset_ = false;
+    double dev2ros_offset_sec_ = 0.0;
+
+    // ===== ViSP AprilTag =====
+    vpDetectorAprilTag tag_detector;
+    vpCameraParameters cam;     // original
+    vpCameraParameters cam_rot; // after 90 deg rotation
+
+    // ===== State =====
+    bool lost_target;
+    double desired_yaw;
+    bool clockwise;
+
+    Eigen::Vector3d Position_before;
+    Eigen::Vector3d Position_after;
+
+    Eigen::Matrix3d R_i2c;
+    Eigen::Matrix3d R_tagfix;
+
+    Eigen::Matrix3d R_w2c;
+    Eigen::Matrix3d R_c2a;
+    Eigen::Matrix3d R_w2a;
+    Eigen::Matrix3d R_w2i;
+    Eigen::Matrix3d R_img;
+
+    // ===== IMU buffer for time alignment =====
+    struct ImuSample
+    {
+        ros::Time t;
+        Eigen::Quaterniond q;
+    };
+    std::mutex imu_mtx_;
+    std::deque<ImuSample> imu_buf_;
+    double imu_buf_span_sec_ = 1.0;
+
+private:
+    void odomCallback(const sensor_msgs::Imu::ConstPtr &msg);
+
+    void publishDetectionResult(ros::Time &ts, bool is_fault);
+    void baseProcess(ros::Time ts, bool is_fault);
+    void processImages(); // process one iteration (one newest frame if available)
+
+    bool getQuatAt(const ros::Time &t, Eigen::Quaterniond &q_out);
+    ros::Time frameToRosTime(const rs2::frame &f);
+};

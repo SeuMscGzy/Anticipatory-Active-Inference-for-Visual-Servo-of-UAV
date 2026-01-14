@@ -22,7 +22,7 @@
         "aux-param-depthclampmin": "0",
         "aux-param-disparityshift": "0",
         "controls-autoexposure-auto": "False",
-        "controls-autoexposure-manual": "4000",
+        "controls-autoexposure-manual": "1400",
         "controls-depth-gain": "64",
         "controls-depth-white-balance-auto": "True",
         "ignoreSAD": "0",
@@ -84,7 +84,7 @@
     "viewer": {
         "stream-depth-format": "Z16",
         "stream-fps": "30",
-        "stream-height": "480",
-        "stream-width": "848"
+        "stream-height": "960",
+        "stream-width": "1280"
     }
 }

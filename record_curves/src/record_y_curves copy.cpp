@@ -18,8 +18,7 @@ public:
         file_.open("data.csv", std::ofstream::out | std::ofstream::trunc);
         // Write header row to CSV
         file_ << "data[0],data[1],data[2],data[3],data[4],data[5],data[6],data[7],data[8],data[9],"
-                 "data[10],data[11],data[12],data[13],data[14],data[15],data[16],data[17],data[18],data[19],data[20],data[21],data[22],data[23],data[24],"
-                 "data[25],data[26],data[27],data[28],data[29],data[30],data[31],data[32]\n";
+                 "data[10],data[11],data[12],data[13],data[14],data[15],data[16],data[17],data[18],data[19],data[20],data[21],data[22],data[23],data[24]\n";
     }
 
     ~DataRecorder()
@@ -31,7 +30,7 @@ public:
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
         // std::cout << msg->data.size() << std::endl;
-        if (msg->data.size() >= 33)
+        if (msg->data.size() >= 25)
         {
             // Write each data element as comma-separated values
             file_ << msg->data[0] << "," << msg->data[1] << "," << msg->data[2] << ","
@@ -41,9 +40,7 @@ public:
                   << msg->data[12] << "," << msg->data[13] << "," << msg->data[14] << ","
                   << msg->data[15] << "," << msg->data[16] << "," << msg->data[17] << ","
                   << msg->data[18] << "," << msg->data[19] << "," << msg->data[20] << ","
-                  << msg->data[21] << "," << msg->data[22] << "," << msg->data[23] << "," << msg->data[24]
-                  << "," << msg->data[25]<< "," << msg->data[26]<< "," << msg->data[27] << "," 
-                  << msg->data[28]<< "," << msg->data[29]<< "," << msg->data[30]<< "," << msg->data[31]<< "," << msg->data[32]<< "\n";
+                  << msg->data[21] << "," << msg->data[22] << "," << msg->data[23] << "," << msg->data[24] << "\n";
         }
     }
 

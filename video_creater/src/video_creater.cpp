@@ -14,7 +14,7 @@ public:
         sub = it.subscribe("/camera/image", 1, &ImageToVideo::imageCallback, this);
 
         // 初始化视频编写器
-        video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 20, cv::Size(640, 480));
+        video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, cv::Size(1280, 720));
     }
     void imageCallback(const sensor_msgs::ImageConstPtr &msg)
     {

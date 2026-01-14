@@ -120,7 +120,7 @@ void PX4CtrlFSM::process()
 		}
 		else if (!rc_data.is_command_mode || !cmd_is_received(now_time) || loss_target_time_count > 3 || in_landing)
 		{
-			if(in_landing)
+			if (in_landing)
 			{
 				ROS_INFO("[px4ctrl] Need AUTO_HOVER(L2) Because of Landing!");
 			}
@@ -330,9 +330,13 @@ void PX4CtrlFSM::set_hov_with_rc() // 得到hov_pose 用遥控器来决定无人
 	hover_pose(1) += rc_data.ch[0] * param.max_manual_vel * delta_t * (param.rc_reverse.roll ? 1 : -1);		// 通道0决定滚转角？
 	hover_pose(2) += rc_data.ch[2] * param.max_manual_vel * delta_t * (param.rc_reverse.throttle ? -1 : 1); // 通道2是油门？
 	hover_pose(3) += rc_data.ch[3] * param.max_manual_vel * delta_t * (param.rc_reverse.yaw ? 1 : -1);		// 通道3是偏航？
-
+	//cout << hover_pose(3) << endl;
 	if (hover_pose(2) < -0.35) // 不能再往下面走了，已经在地面上了
 		hover_pose(2) = -0.35;
+	while (hover_pose(3) > M_PI)
+		hover_pose(3) -= 2.0 * M_PI;
+	while (hover_pose(3) < -M_PI)
+		hover_pose(3) += 2.0 * M_PI;
 }
 
 bool PX4CtrlFSM::rc_is_received(const ros::Time &now_time)

@@ -104,44 +104,74 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   pos_vel_control_counter++;
   des_acc += Eigen::Vector3d(0, 0, param_.gra);
   // 避免 0 向量
-  Eigen::Vector3d e3(0.0, 0.0, 1.0);
-  if (des_acc.norm() < 1e-6)
+  Eigen::Vector3d body_z = des_acc;
+  if (body_z.squaredNorm() < 1e-12)
   {
-    des_acc = param_.gra * e3; // 退化到悬停
+    body_z = Eigen::Vector3d(0.0, 0.0, param_.gra);
   }
-  Eigen::Vector3d b3 = des_acc.normalized();
+  body_z.normalize();
 
-  // 2) 期望 yaw -> 参考 b1c
-  double psi = des.yaw; // 期望航向（世界系）
-  Eigen::Vector3d b1c(std::cos(psi), std::sin(psi), 0.0);
-
-  // 3) 用叉乘构造 b1, b2
-  Eigen::Vector3d b2 = b3.cross(b1c);
-  if (b2.norm() < 1e-6)
+  // ---- Tilt limit: keep body_z within a cone around +Z (world) with angle <= max_angle ----
+  const Eigen::Vector3d e3 = Eigen::Vector3d::UnitZ();
+  const double cos_max_tilt = std::cos(param_.max_angle);
+  const double cos_tilt = body_z.dot(e3);
+  if (cos_tilt < cos_max_tilt)
   {
-    // 说明 b3 和 b1c 几乎平行，随便取一个正交方向
-    b2 = Eigen::Vector3d(0.0, 0.0, 1.0).cross(b3);
+    Eigen::Vector3d v = body_z - cos_tilt * e3; // horizontal component
+    if (v.squaredNorm() < 1e-12)
+    {
+      body_z = e3;
+    }
+    else
+    {
+      v.normalize();
+      body_z = v * std::sin(param_.max_angle) + e3 * cos_max_tilt;
+      body_z.normalize();
+    }
   }
-  b2.normalize();
 
-  Eigen::Vector3d b1 = b2.cross(b3);
+  // Desired yaw direction in XY plane (rotated by +90deg, matches PX4's y_C definition)
+  const double yaw_sp = des.yaw;
+  const Eigen::Vector3d y_C(-std::sin(yaw_sp), std::cos(yaw_sp), 0.0);
 
-  // 4) 得到期望旋转矩阵（世界->机体系）
-  Eigen::Matrix3d R_des;
-  R_des.col(0) = b1;
-  R_des.col(1) = b2;
-  R_des.col(2) = b3;
+  // Desired body_x axis, orthogonal to body_z
+  Eigen::Vector3d body_x = y_C.cross(body_z);
+  if (body_x.squaredNorm() < 1e-12)
+  {
+    // Degenerate: body_z almost parallel to y_C, fallback
+    body_x = Eigen::Vector3d(std::cos(yaw_sp), std::sin(yaw_sp), 0.0).cross(body_z);
+  }
+  body_x.normalize();
 
-  // 5) 转成四元数
-  Eigen::Quaterniond q_des(R_des);
+  Eigen::Vector3d body_y = body_z.cross(body_x);
+  body_y.normalize();
+
+  Eigen::Matrix3d R_w_b_des;
+  R_w_b_des.col(0) = body_x;
+  R_w_b_des.col(1) = body_y;
+  R_w_b_des.col(2) = body_z;
+
+  Eigen::Quaterniond q_des(R_w_b_des);
   q_des.normalize();
 
-  // 6) 和你原来的坐标系补偿拼在一起
-  u.q = imu.q * odom.q.inverse() * q_des;
+  // NOTE: 强烈建议不要再乘 imu.q * odom.q.inverse()，它既不必要，还会引入不一致/跳变源
+  Eigen::Quaterniond q_sp = q_des;
+  // 如果你坚持要保留“修正”，请用这一行替换上一行，并且一定要在下面做连续性：
+  // Eigen::Quaterniond q_sp = (imu.q * odom.q.inverse() * q_des).normalized();
+
+  // Quaternion continuity: keep setpoint in the same hemisphere to avoid sign flips near yaw=±pi
+  static Eigen::Quaterniond last_q_sp(1.0, 0.0, 0.0, 0.0);
+  if (q_sp.dot(last_q_sp) < 0.0)
+  {
+    q_sp.coeffs() *= -1.0;
+  }
+  last_q_sp = q_sp;
+
+  u.q = q_sp;
 
   Eigen::Vector3d b3_curr = odom.q.toRotationMatrix().col(2); // 机体 z 轴在世界系中的方向
   u.thrust = computeDesiredCollectiveThrustSignal(des_acc.dot(b3_curr));
-  double cos_tilt = b3_curr.dot(e3);
+  double cos_tilt_now = b3_curr.dot(e3);
   if (state_count == 1)
   {
     u.thrust = 0.01;
@@ -187,7 +217,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
 
   if (takeoff_count >= 500)
   {
-    timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), cos_tilt * u.thrust));
+    timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), cos_tilt_now * u.thrust));
   }
   while (timed_thrust_.size() > 100)
   {
@@ -211,6 +241,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   {
     cout << "thr2acc_: " << thr2acc_ << endl;
     cout << "des_acc: " << des_acc.transpose() << ", thrust: " << u.thrust << endl;
+    cout << "des_yaw: " << yaw_sp << endl;
     count_ = 0;
   }
   return debug_msg_;

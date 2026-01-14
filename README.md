@@ -7,6 +7,15 @@ This repository contains the official C++ implementation of the **Anticipatory A
 
 This codebase accompanies our research paper: **"EVS for UAVs: Emulating Bio-Behavior via Anticipatory Active Inference and Data Augmentation"**. The proposed framework introduces Future Variational Free Energy (F-VFE) to enable proactive bio-inspired behavior, supported by a robust Data Augmentation strategy.
 
+## 🎥 Video Demonstration
+
+### 🚁 Agile Tracking Performance
+We demonstrate the agile tracking capabilities of the AAI controller under dynamic target maneuvers.
+
+[![Watch the video](https://img.youtube.com/vi/mQSdQ0aYD4c/maxresdefault.jpg)](https://youtu.be/mQSdQ0aYD4c)
+
+*(Click the image above to watch the full demonstration on YouTube)*
+
 ## 🌟 Key Contributions & Features
 
 Based on the contributions of our paper, this repository provides:

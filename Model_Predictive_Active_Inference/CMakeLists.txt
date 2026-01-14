@@ -169,7 +169,7 @@ catkin_package(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(testnode_mpai src/mpai_qpOASES.cpp src/AAI_DA.cpp src/run_AAI_DA_UAV.cpp)
+add_executable(testnode_mpai src/aai_qpOASES.cpp src/AAI_DA.cpp src/run_AAI_DA_UAV.cpp)
 #add_executable(testnode_mpai src/mpai_qpOASES.cpp)
 #add_executable(testnode_mpai src/mpai_casadi.cpp src/mpai_casadi_qp.cpp src/RAID_AgiVS_for_test.cpp src/run_RAID_AgiVS.cpp)
 ## Rename C++ executable without prefix

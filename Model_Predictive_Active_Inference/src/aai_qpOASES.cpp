@@ -1,4 +1,4 @@
-#include "mpai_qpOASES.h"
+#include "aai_qpOASES.h"
 
 #include <iostream>
 

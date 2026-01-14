@@ -1,6 +1,6 @@
 #include <ros/ros.h>
 #include <std_msgs/Float64.h>
-#include "mpai_qpOASES.h"
+#include "aai_qpOASES.h"
 #include <std_msgs/Int32.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float64MultiArray.h>

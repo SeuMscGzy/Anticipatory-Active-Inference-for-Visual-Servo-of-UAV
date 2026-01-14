@@ -1,4 +1,4 @@
-#include "mpai_qp.h"
+#include "aai_qp.h"
 
 Optimizer::Optimizer(double dt, int Np, double precice_z1, double precice_z2,
                      double precice_w1, double precice_w2, double precice_z_u, double e1,

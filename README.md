@@ -104,3 +104,11 @@ target_link_libraries(run_AAI_DA_UAV ${catkin_LIBRARIES} ${qpOASES_LIBRARIES})
 ```
 
 *Change `src/aai_qpOASES.cpp` to `src/aai_qp.cpp` or `src/aai_casadi.cpp` depending on the desired backend.*
+
+## 📚 Theoretical Derivation
+
+For a deeper understanding of the mathematical principles behind the code, please refer to the included **`transfer_aai_to_qp_problem.pdf`**. This document details:
+
+1.  [cite_start]**Future Variational Free Energy (F-VFE)**: The definition of the objective function that combines external tracking error with internal belief dynamics consistency[cite: 21, 25].
+2.  [cite_start]**QP Formulation**: The step-by-step derivation transforming the active inference problem into a standard **Quadratic Programming (QP)** form[cite: 38, 46].
+3.  [cite_start]**Matrix Definitions**: Explicit definitions of the prediction matrices ($\Phi$, $F$) and transformation matrices ($T_1$, $T_2$) used in the `Optimizer` classes to construct the Hessian and gradient[cite: 37, 39, 44].

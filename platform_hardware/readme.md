@@ -7,7 +7,7 @@ To ensure reproducibility and facilitate further research in agile UAV control, 
 
 Our experimental platform is a custom-designed, high-performance quadrotor optimized for indoor visual servoing and agile maneuvers. The system features a high thrust-to-weight ratio (> 4.0) and onboard edge computing capabilities.
 
-![UAV Hardware Architecture](uav.jpg)
+![UAV Hardware Architecture](uav.png)
 
 ### Component Specifications
 
@@ -35,7 +35,7 @@ The hardware architecture is designed for low-latency control:
 
 To achieve precise model-based control (as required by the AAI framework), accurate identification of the propulsion system parameters (thrust coefficients $k_1, k_2, k_3$) is essential. We designed a custom thrust test stand to collect ground truth data mapping rotor speed (RPM) to thrust.
 
-![Thrust Test Platform](thrust test platform.jpg)
+![Thrust Test Platform](thrust test platform.png)
 
 ### Features
 * **Mechanism**: A lever-arm structure with a sliding rail ensures linear force transmission to the load cell.

@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>Model_Predictive_Active_Inference</name>
+  <name>Anticipatory_Active_Inference_with_Data_Augmentation</name>
   <version>0.0.0</version>
-  <description>The Model_Predictive_Active_Inference package</description>
+  <description>The Anticipatory_Active_Inference_with_Data_Augmentation package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/Model_Predictive_Active_Inference</url> -->
+  <!-- <url type="website">http://wiki.ros.org/Anticipatory_Active_Inference_with_Data_Augmentation</url> -->
 
 
   <!-- Author tags are optional, multiple are allowed, one per tag -->
